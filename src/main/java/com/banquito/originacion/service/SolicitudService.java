@@ -2,8 +2,6 @@ package com.banquito.originacion.service;
 
 import com.banquito.originacion.controller.dto.*;
 import com.banquito.originacion.controller.mapper.SolicitudCreditoMapper;
-import com.banquito.originacion.enums.ClasificacionClienteEnum;
-import com.banquito.originacion.enums.EstadoClienteEnum;
 import com.banquito.originacion.enums.EstadoSolicitudEnum;
 import com.banquito.originacion.exception.CreateEntityException;
 import com.banquito.originacion.exception.ResourceNotFoundException;
@@ -43,96 +41,149 @@ public class SolicitudService {
     private final ClienteProspectoRepository clienteProspectoRepository;
     private final DocumentoAdjuntoMapper documentoAdjuntoMapper;
     private final HistorialEstadoMapper historialEstadoMapper;
+    private final GestionVehiculosService gestionVehiculosService;
 
-    // 1. Crear Solicitud
-    public SolicitudCreditoResponseDTO crearSolicitud(SolicitudCreditoDTO solicitudDTO) {
-        // Validar existencia de cliente prospecto
+
+
+    public SolicitudCreditoResponseDTO crearSolicitudConValidacion(SolicitudCreditoExtendidaDTO solicitudDTO) {
+        log.info("Iniciando creación de solicitud con validación de vehículo y vendedor");
+        
         if (!clienteProspectoRepository.existsById(solicitudDTO.getIdClienteProspecto())) {
-            throw new CreateEntityException("El cliente prospecto no existe");
+            throw new CreateEntityException("SolicitudCredito", "El cliente prospecto no existe");
         }
-        // Validar que no haya otra solicitud en BORRADOR para el mismo cliente y producto
+        
         boolean existeBorrador = solicitudCreditoRepository.findAll().stream()
             .anyMatch(s -> s.getIdClienteProspecto().equals(solicitudDTO.getIdClienteProspecto())
                 && s.getIdProductoCredito().equals(solicitudDTO.getIdProductoCredito())
                 && "BORRADOR".equals(s.getEstado()));
         if (existeBorrador) {
-            throw new CreateEntityException("Ya existe una solicitud en estado BORRADOR para este cliente y producto");
+            throw new CreateEntityException("SolicitudCredito", "Ya existe una solicitud en estado BORRADOR para este cliente y producto");
         }
-        // TODO: Validar existencia y estado de vehículo, producto, vendedor (otros microservicios)
-        // TODO: Obtener condiciones del producto (plazo, monto, etc.)
-        // 1. Validar campos obligatorios (ya validados por DTO)
-        // 2. Generar número de solicitud único
+        
+        VehiculoResponseDTO vehiculo = gestionVehiculosService.obtenerVehiculo(
+            solicitudDTO.getRucConcesionario(), 
+            solicitudDTO.getPlacaVehiculo()
+        );
+        
+        if (!gestionVehiculosService.validarVehiculoDisponible(vehiculo)) {
+            throw new CreateEntityException("SolicitudCredito", "El vehículo no está disponible para financiamiento");
+        }
+        
+        VendedorResponseDTO vendedor = gestionVehiculosService.obtenerVendedor(
+            solicitudDTO.getRucConcesionario(), 
+            solicitudDTO.getCedulaVendedor()
+        );
+        
+        if (!gestionVehiculosService.validarVendedorActivo(vendedor)) {
+            throw new CreateEntityException("SolicitudCredito", "El vendedor no está activo");
+        }
+        
+        // Calcular monto solicitado = valor vehículo - entrada
+        BigDecimal valorVehiculo = vehiculo.getValor();
+        BigDecimal montoSolicitado = valorVehiculo.subtract(solicitudDTO.getValorEntrada());
+        
+        // Validar entrada mínima del 20%
+        BigDecimal entradaMinima = valorVehiculo.multiply(new BigDecimal("0.2"));
+        if (solicitudDTO.getValorEntrada().compareTo(entradaMinima) < 0) {
+            throw new CreateEntityException("SolicitudCredito", "La entrada debe ser al menos el 20% del valor del vehículo. Mínimo requerido: " + entradaMinima);
+        }
+        
+        // Validar monto máximo del 80%
+        BigDecimal montoMaximo = valorVehiculo.multiply(new BigDecimal("0.8"));
+        if (montoSolicitado.compareTo(montoMaximo) > 0) {
+            throw new CreateEntityException("SolicitudCredito", "El monto solicitado excede el 80% del valor del vehículo. Máximo permitido: " + montoMaximo);
+        }
+        
+        BigDecimal cuotaMensual = calcularCuotaMensual(montoSolicitado, solicitudDTO.getPlazoMeses(), solicitudDTO.getTasaInteres());
         String numeroSolicitud = generarNumeroSolicitud();
-        // 3. Establecer estado inicial
         String estadoInicial = "BORRADOR";
-        // 4. Guardar en tabla solicitudes_credito
-        SolicitudCredito solicitud = solicitudCreditoMapper.toEntity(solicitudDTO);
+        
+        SolicitudCredito solicitud = new SolicitudCredito();
+        solicitud.setIdClienteProspecto(solicitudDTO.getIdClienteProspecto());
+        solicitud.setIdProductoCredito(solicitudDTO.getIdProductoCredito());
+        solicitud.setMontoSolicitado(montoSolicitado);
+        solicitud.setPlazoMeses(solicitudDTO.getPlazoMeses());
+        solicitud.setValorEntrada(solicitudDTO.getValorEntrada());
+        solicitud.setTasaInteresAplicada(solicitudDTO.getTasaInteres());
+        solicitud.setCuotaMensualCalculada(cuotaMensual);
         solicitud.setNumeroSolicitud(numeroSolicitud);
         solicitud.setEstado(estadoInicial);
         solicitud.setFechaSolicitud(LocalDateTime.now());
+        solicitud.setRucConcesionario(solicitudDTO.getRucConcesionario());
+        solicitud.setPlacaVehiculo(solicitudDTO.getPlacaVehiculo());
+        solicitud.setCedulaVendedor(solicitudDTO.getCedulaVendedor());
+        
         SolicitudCredito saved = solicitudCreditoRepository.save(solicitud);
-        // 5. Registrar en historial_estados
+        
         HistorialEstado historial = new HistorialEstado();
         historial.setIdSolicitud(saved.getId());
         historial.setEstadoNuevo(estadoInicial);
         historial.setFechaCambio(LocalDateTime.now());
         historial.setUsuarioModificacion(0L); // TODO: usuario real
-        historial.setMotivo("Creación de solicitud");
+        historial.setMotivo("Creación de solicitud con validación de vehículo y vendedor");
         historialEstadoRepository.save(historial);
+        
+        log.info("Solicitud creada exitosamente con número: {}", numeroSolicitud);
         return solicitudCreditoMapper.toResponseDTO(saved);
     }
 
-    private String generarNumeroSolicitud() {
-        String fecha = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        int secuencia = (int) (Math.random() * 9000) + 1000;
-        return "SOL-" + fecha + "-" + secuencia;
-    }
 
-    // 2. Simular Crédito
-    public List<AmortizacionDTO> simularCredito(SimulacionDTO simulacionDTO) {
-        // TODO: Obtener valor del vehículo y condiciones del producto (otros microservicios)
-        // TODO: Validar monto vs valor vehículo (máximo 80%)
-        // TODO: Validar cuota vs ingresos (máximo 40%)
-        // TODO: Generar escenarios (entrada 20%, sin entrada, plazo máximo)
-        // Por ahora, solo un escenario simple:
-        BigDecimal monto = simulacionDTO.getMontoSolicitado();
-        int plazo = simulacionDTO.getPlazoMeses();
-        BigDecimal tasa = new BigDecimal("0.15"); // TODO: traer tasa real
-        return calcularTablaAmortizacion(monto, plazo, tasa);
-    }
 
-    private List<AmortizacionDTO> calcularTablaAmortizacion(BigDecimal monto, int plazo, BigDecimal tasaAnual) {
-        List<AmortizacionDTO> tabla = new ArrayList<>();
-        BigDecimal saldo = monto;
-        BigDecimal tasaMensual = tasaAnual.divide(BigDecimal.valueOf(12), 8, BigDecimal.ROUND_HALF_UP);
-        BigDecimal cuota = monto.multiply(tasaMensual).divide(BigDecimal.ONE.subtract(BigDecimal.ONE.divide((BigDecimal.ONE.add(tasaMensual)).pow(plazo), 8, BigDecimal.ROUND_HALF_UP)), 2, BigDecimal.ROUND_HALF_UP);
-        for (int i = 1; i <= plazo; i++) {
-            BigDecimal interes = saldo.multiply(tasaMensual).setScale(2, BigDecimal.ROUND_HALF_UP);
-            BigDecimal abonoCapital = cuota.subtract(interes);
-            BigDecimal saldoFinal = saldo.subtract(abonoCapital);
-            tabla.add(new AmortizacionDTO(i, saldo, cuota, abonoCapital, interes, saldoFinal));
-            saldo = saldoFinal;
+    public List<AmortizacionDTO> simularCreditoConValidacion(String rucConcesionario, String placaVehiculo, BigDecimal montoSolicitado, Integer plazoMeses, BigDecimal tasaInteres) {
+        log.info("Iniciando simulación de crédito para vehículo: {} en concesionario: {}", placaVehiculo, rucConcesionario);
+        
+        VehiculoResponseDTO vehiculo = gestionVehiculosService.obtenerVehiculo(rucConcesionario, placaVehiculo);
+        
+        if (!gestionVehiculosService.validarVehiculoDisponible(vehiculo)) {
+            throw new CreateEntityException("SimulacionCredito", "El vehículo no está disponible para financiamiento");
         }
-        return tabla;
+        
+        // Validar monto máximo del 80%
+        BigDecimal valorVehiculo = vehiculo.getValor();
+        BigDecimal montoMaximo = valorVehiculo.multiply(new BigDecimal("0.8"));
+        
+        if (montoSolicitado.compareTo(montoMaximo) > 0) {
+            throw new CreateEntityException("SimulacionCredito", "El monto solicitado excede el 80% del valor del vehículo. Máximo permitido: " + montoMaximo);
+        }
+        
+        log.info("Simulando crédito: monto={}, plazo={}, valorVehiculo={}", 
+                montoSolicitado, plazoMeses, valorVehiculo);
+        
+        // Generar 3 escenarios de simulación
+        List<AmortizacionDTO> todosLosEscenarios = new ArrayList<>();
+        
+        // Escenario 1: Con entrada 20%
+        BigDecimal entrada20Porcentaje = montoSolicitado.multiply(new BigDecimal("0.2"));
+        BigDecimal montoConEntrada = montoSolicitado.subtract(entrada20Porcentaje);
+        List<AmortizacionDTO> escenario1 = calcularTablaAmortizacion(montoConEntrada, plazoMeses, tasaInteres);
+        escenario1.forEach(cuota -> cuota.setEscenario("Con entrada 20%"));
+        todosLosEscenarios.addAll(escenario1);
+        
+        // Escenario 2: Sin entrada
+        List<AmortizacionDTO> escenario2 = calcularTablaAmortizacion(montoSolicitado, plazoMeses, tasaInteres);
+        escenario2.forEach(cuota -> cuota.setEscenario("Sin entrada"));
+        todosLosEscenarios.addAll(escenario2);
+        
+        // Escenario 3: Plazo máximo para menor cuota
+        int plazoMaximo = Math.min(60, plazoMeses * 2);
+        List<AmortizacionDTO> escenario3 = calcularTablaAmortizacion(montoSolicitado, plazoMaximo, tasaInteres);
+        escenario3.forEach(cuota -> cuota.setEscenario("Plazo máximo (" + plazoMaximo + " meses)"));
+        todosLosEscenarios.addAll(escenario3);
+        
+        return todosLosEscenarios;
     }
 
-    // 3. Cargar Documento
     public DocumentoAdjuntoResponseDTO cargarDocumento(Long idSolicitud, MultipartFile archivo, String tipoDocumento) {
-        // Validar tipo y tamaño de archivo
         if (archivo == null || archivo.isEmpty()) {
-            throw new CreateEntityException("El archivo es obligatorio");
+            throw new CreateEntityException("DocumentoAdjunto", "El archivo es obligatorio");
         }
         if (!archivo.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
-            throw new CreateEntityException("El archivo debe ser un PDF");
+            throw new CreateEntityException("DocumentoAdjunto", "El archivo debe ser un PDF");
         }
         if (archivo.getSize() > 5 * 1024 * 1024) {
-            throw new CreateEntityException("El archivo no debe superar los 5MB");
+            throw new CreateEntityException("DocumentoAdjunto", "El archivo no debe superar los 5MB");
         }
-        // TODO: Generar nombre único y guardar en sistema de archivos
-        // TODO: Obtener lista de documentos requeridos del producto (microservicio productos)
-        // TODO: Registrar en tabla documentos_adjuntos
-        // TODO: Actualizar historial si es el último documento obligatorio
-        // Simulación de registro:
+        
         DocumentoAdjunto doc = new DocumentoAdjunto();
         doc.setIdSolicitud(idSolicitud);
         doc.setNombreArchivo(archivo.getOriginalFilename());
@@ -143,7 +194,6 @@ public class SolicitudService {
         return documentoAdjuntoMapper.toResponseDTO(saved);
     }
 
-    // 4. Consultar Estado Solicitud
     public EstadoSolicitudResponseDTO consultarEstadoSolicitud(Long idSolicitud) {
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
@@ -154,7 +204,6 @@ public class SolicitudService {
         return response;
     }
 
-    // 5. Cambiar Estado Solicitud
     public void cambiarEstadoSolicitud(Long idSolicitud, String nuevoEstado, String motivo, String usuario) {
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
@@ -163,10 +212,10 @@ public class SolicitudService {
         try {
             estadoNuevo = EstadoSolicitudEnum.valueOf(nuevoEstado);
         } catch (IllegalArgumentException e) {
-            throw new CreateEntityException("Estado de solicitud no válido: " + nuevoEstado);
+            throw new CreateEntityException("SolicitudCredito", "Estado de solicitud no válido: " + nuevoEstado);
         }
         if (!esTransicionValida(estadoActual, estadoNuevo)) {
-            throw new CreateEntityException("Transición de estado no permitida: " + estadoActual + " -> " + estadoNuevo);
+            throw new CreateEntityException("SolicitudCredito", "Transición de estado no permitida: " + estadoActual + " -> " + estadoNuevo);
         }
         String estadoAnterior = solicitud.getEstado();
         solicitud.setEstado(nuevoEstado);
@@ -179,7 +228,54 @@ public class SolicitudService {
         historial.setUsuarioModificacion(0L); // TODO: usuario real
         historial.setMotivo(motivo);
         historialEstadoRepository.save(historial);
-        // TODO: Enviar notificación (futuro)
+    }
+
+    public SolicitudResumenDTO obtenerResumenSolicitud(Long idSolicitud) {
+        SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
+        
+        // Obtener información del vehículo para el precio final
+        VehiculoResponseDTO vehiculo = gestionVehiculosService.obtenerVehiculo(
+            solicitud.getRucConcesionario(), 
+            solicitud.getPlacaVehiculo()
+        );
+        
+        return new SolicitudResumenDTO(
+            solicitud.getId(),
+            vehiculo.getValor(), // precio_final_vehiculo
+            solicitud.getMontoSolicitado(), // monto_aprobado
+            solicitud.getPlazoMeses(), // plazo_final_meses
+            solicitud.getTasaInteresAplicada() // tasa_efectiva_anual
+        );
+    }
+
+    private String generarNumeroSolicitud() {
+        String fecha = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        int secuencia = (int) (Math.random() * 9000) + 1000;
+        return "SOL-" + fecha + "-" + secuencia;
+    }
+
+    // Método francés para calcular cuota mensual
+    private BigDecimal calcularCuotaMensual(BigDecimal monto, int plazo, BigDecimal tasaAnual) {
+        BigDecimal tasaMensual = tasaAnual.divide(BigDecimal.valueOf(12), 8, BigDecimal.ROUND_HALF_UP);
+        BigDecimal cuota = monto.multiply(tasaMensual)
+                .divide(BigDecimal.ONE.subtract(BigDecimal.ONE.divide((BigDecimal.ONE.add(tasaMensual)).pow(plazo), 8, BigDecimal.ROUND_HALF_UP)), 2, BigDecimal.ROUND_HALF_UP);
+        return cuota;
+    }
+
+    private List<AmortizacionDTO> calcularTablaAmortizacion(BigDecimal monto, int plazo, BigDecimal tasaAnual) {
+        List<AmortizacionDTO> tabla = new ArrayList<>();
+        BigDecimal saldo = monto;
+        BigDecimal tasaMensual = tasaAnual.divide(BigDecimal.valueOf(12), 8, BigDecimal.ROUND_HALF_UP);
+        BigDecimal cuota = calcularCuotaMensual(monto, plazo, tasaAnual);
+        for (int i = 1; i <= plazo; i++) {
+            BigDecimal interes = saldo.multiply(tasaMensual).setScale(2, BigDecimal.ROUND_HALF_UP);
+            BigDecimal abonoCapital = cuota.subtract(interes);
+            BigDecimal saldoFinal = saldo.subtract(abonoCapital);
+            tabla.add(new AmortizacionDTO(i, saldo, cuota, abonoCapital, interes, saldoFinal));
+            saldo = saldoFinal;
+        }
+        return tabla;
     }
 
     private boolean esTransicionValida(EstadoSolicitudEnum actual, EstadoSolicitudEnum nuevo) {
@@ -188,13 +284,5 @@ public class SolicitudService {
             case EN_REVISION -> nuevo == EstadoSolicitudEnum.APROBADA || nuevo == EstadoSolicitudEnum.RECHAZADA || nuevo == EstadoSolicitudEnum.CANCELADA;
             case APROBADA, RECHAZADA, CANCELADA -> false;
         };
-    }
-
-    // 6. Validar Documentos Completos
-    public List<String> validarDocumentosCompletos(Long idSolicitud) {
-        // TODO: Obtener lista de documentos requeridos del producto (microservicio productos)
-        // TODO: Verificar documentos cargados para la solicitud
-        // TODO: Comparar y retornar lista de faltantes
-        throw new UnsupportedOperationException("No implementado aún");
     }
 } 

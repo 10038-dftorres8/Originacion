@@ -38,6 +38,16 @@ public class SolicitudCredito {
     @Column(name = "id_producto_credito", nullable = false)
     private Long idProductoCredito;
 
+    // Campos para integración con servicio de gestión de vehículos
+    @Column(name = "ruc_concesionario", length = 13)
+    private String rucConcesionario;
+
+    @Column(name = "placa_vehiculo", length = 10)
+    private String placaVehiculo;
+
+    @Column(name = "cedula_vendedor", length = 10)
+    private String cedulaVendedor;
+
     @Column(name = "monto_solicitado", precision = 12, scale = 2, nullable = false)
     private BigDecimal montoSolicitado;
 

@@ -14,6 +14,8 @@ public interface HistorialEstadoRepository extends JpaRepository<HistorialEstado
     
     List<HistorialEstado> findByIdSolicitudOrderByFechaCambioDesc(Long idSolicitud);
     
+    List<HistorialEstado> findByIdSolicitudOrderByFechaCambioAsc(Long idSolicitud);
+    
     List<HistorialEstado> findByEstadoNuevo(String estadoNuevo);
     
     List<HistorialEstado> findByUsuarioModificacion(Long usuarioModificacion);

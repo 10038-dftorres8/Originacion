@@ -149,4 +149,180 @@ La documentación está disponible en:
 - La versión para control de concurrencia es `Long`
 - Se usan métodos JPA estándar (sin `@Query` ni `@Modifying`)
 - Las excepciones personalizadas están implementadas
-- El logging está configurado con SLF4J 
+- El logging está configurado con SLF4J
+
+# Servicio de Clientes - Integración con Core Bancario
+
+Este documento describe el servicio de clientes que integra con el Core Bancario para validar y registrar clientes prospectos.
+
+## Configuración
+
+### Dependencias
+- `spring-cloud-starter-openfeign`: Cliente HTTP declarativo
+- `feign-okhttp`: Cliente HTTP OkHttp para mejor rendimiento
+
+### Configuración de URLs
+En `application.properties`:
+```properties
+# Configuración del Core Bancario
+app.core-bancario.url=http://localhost:8082
+```
+
+## Funcionalidades
+
+### 1. Consultar Cliente por Cédula
+**Endpoint:** `GET /api/v1/clientes/cedula/{cedula}`
+
+**Funcionalidad:**
+- Busca primero en la base de datos local
+- Si no existe localmente, consulta en el Core Bancario
+- Retorna información del cliente encontrado
+
+**Respuesta del Core Bancario:**
+```json
+{
+    "id": "6869ffb3ea7982e7de57e0ee",
+    "tipoEntidad": "PERSONA",
+    "idEntidad": "6869ff04ea7982e7de57e0ed",
+    "nombre": "Juan Carlos Pérez García",
+    "nacionalidad": null,
+    "tipoIdentificacion": "CEDULA",
+    "numeroIdentificacion": "1234567890",
+    "tipoCliente": "NATURAL",
+    "segmento": "PERSONAL",
+    "canalAfiliacion": "OFICINA",
+    "comentarios": "Cliente preferencial",
+    "estado": "ACTIVO",
+    "fechaCreacion": "2025-07-05",
+    "telefonos": [
+        {
+            "tipo": "MOVIL",
+            "numero": "0987002679",
+            "fechaCreacion": "2025-07-06",
+            "fechaActualizacion": "2025-07-06",
+            "estado": "ACTIVO"
+        }
+    ],
+    "direcciones": [
+        {
+            "tipo": "RESIDENCIAL",
+            "linea1": "Av. Amazonas 123",
+            "linea2": "Edificio Centro, Piso 5",
+            "codigoPostal": "170515",
+            "codigoGeografico": "170101",
+            "codigoProvincia": "17",
+            "codigoCanton": "01",
+            "fechaCreacion": "2024-01-15",
+            "fechaActualizacion": "2024-01-15",
+            "estado": "ACTIVO"
+        }
+    ],
+    "contactoTransaccional": null,
+    "sucursales": [
+        {
+            "codigoSucursal": "001",
+            "estado": "ACTIVO",
+            "fechaCreacion": "2024-01-15",
+            "fechaUltimaActualizacion": "2024-01-15"
+        }
+    ]
+}
+```
+
+### 2. Registrar Cliente Prospecto
+**Endpoint:** `POST /api/v1/clientes`
+
+**Funcionalidad:**
+- Valida que no exista un cliente con la misma cédula en la base local
+- Consulta si existe en el Core Bancario
+- Si existe en Core Bancario:
+  - Mapea los datos del Core Bancario a la entidad local
+  - Guarda el `idClienteCore` para referencia
+  - Sobrescribe con datos del DTO de registro si están presentes
+- Si no existe en Core Bancario:
+  - Registra como nuevo prospecto
+
+**Body de ejemplo:**
+```json
+{
+    "cedula": "1234567890",
+    "nombres": "Juan Pérez",
+    "genero": "MASCULINO",
+    "fechaNacimiento": "1990-01-01T00:00:00",
+    "nivelEstudio": "UNIVERSITARIO",
+    "estadoCivil": "SOLTERO",
+    "ingresos": 1500.00,
+    "egresos": 800.00,
+    "actividadEconomica": "EMPLEADO",
+    "correoTransaccional": "juan@email.com",
+    "telefonoTransaccional": "0987654321",
+    "telefonoTipo": "MOVIL",
+    "telefonoNumero": "0987654321",
+    "direccionTipo": "RESIDENCIAL",
+    "direccionLinea1": "Av. Principal 123",
+    "direccionLinea2": "Edificio Central",
+    "direccionCodigoPostal": "170515",
+    "direccionGeoCodigo": "170101"
+}
+```
+
+## Mapeo de Datos
+
+### Del Core Bancario a ClienteProspecto
+- `id` → `idClienteCore` (convertido usando hashCode)
+- `numeroIdentificacion` → `cedula`
+- `nombre` → `nombres`
+- `telefonos[0].numero` → `telefonoTransaccional` (primer teléfono activo)
+- `telefonos[0].tipo` → `telefonoTipo`
+- `direcciones[0].linea1` → `direccionLinea1` (primera dirección activa)
+- `direcciones[0].linea2` → `direccionLinea2`
+- `direcciones[0].codigoPostal` → `direccionCodigoPostal`
+- `direcciones[0].codigoGeografico` → `direccionGeoCodigo`
+
+### Valores por Defecto
+Para campos no disponibles en el Core Bancario se asignan valores por defecto:
+- `genero`: "MASCULINO"
+- `fechaNacimiento`: 30 años atrás desde hoy
+- `nivelEstudio`: "UNIVERSITARIO"
+- `estadoCivil`: "SOLTERO"
+- `ingresos`: 1000.00
+- `egresos`: 500.00
+- `actividadEconomica`: "EMPLEADO"
+- `correoTransaccional`: "cliente@email.com"
+
+## Validaciones
+
+### Cédula Ecuatoriana
+- Debe tener exactamente 10 dígitos
+- Solo números
+- Validación del dígito verificador según algoritmo ecuatoriano
+
+### Duplicados
+- Verifica que no exista otro cliente con la misma cédula en la base local
+
+## Manejo de Errores
+
+### Errores Comunes
+- **400**: Cédula inválida o datos de validación incorrectos
+- **404**: Cliente no encontrado
+- **409**: Cliente ya existe (para registro)
+- **500**: Error interno del Core Bancario
+
+### Logging
+- Registra todas las operaciones importantes
+- Incluye información de trazabilidad
+- Maneja errores de comunicación con el Core Bancario
+
+## Consideraciones Técnicas
+
+1. **Conversión de IDs**: El Core Bancario usa ObjectId de MongoDB (String), se convierte a Long usando hashCode
+2. **Mapeo Inteligente**: Extrae información de arrays (teléfonos, direcciones) priorizando registros activos
+3. **Sobrescritura de Datos**: Los datos del DTO de registro tienen prioridad sobre los del Core Bancario
+4. **Fallback**: Si no hay datos en el Core Bancario, se usan valores por defecto sensatos
+
+## Próximos Pasos
+
+1. Implementar cache para consultas frecuentes
+2. Agregar validaciones adicionales según reglas de negocio
+3. Implementar sincronización bidireccional con Core Bancario
+4. Agregar métricas de uso del servicio 

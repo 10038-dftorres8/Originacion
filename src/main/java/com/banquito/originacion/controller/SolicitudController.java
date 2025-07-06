@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
+
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -33,35 +34,41 @@ public class SolicitudController {
 
     private final SolicitudService solicitudService;
 
-    @Operation(summary = "Crear nueva solicitud de crédito", description = "Crea una nueva solicitud en estado BORRADOR.")
+    @Operation(summary = "Crear solicitud con validación de vehículo y vendedor", 
+               description = "Crea una nueva solicitud de crédito validando la existencia y estado del vehículo y vendedor")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Solicitud creada exitosamente", content = @Content(schema = @Schema(implementation = SolicitudCredito.class))),
-        @ApiResponse(responseCode = "400", description = "Datos inválidos o solicitud duplicada", content = @Content)
+        @ApiResponse(responseCode = "400", description = "Datos inválidos o validación fallida", content = @Content)
     })
-    @PostMapping
-    public ResponseEntity<SolicitudCreditoResponseDTO> crearSolicitud(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Datos de la solicitud", required = true, content = @Content(schema = @Schema(implementation = SolicitudCreditoDTO.class)))
-            @Valid @RequestBody SolicitudCreditoDTO solicitudDTO) {
-        log.info("Creando solicitud para cliente {} y producto {}", solicitudDTO.getIdClienteProspecto(), solicitudDTO.getIdProductoCredito());
-        SolicitudCreditoResponseDTO response = solicitudService.crearSolicitud(solicitudDTO);
+    @PostMapping("/con-validacion")
+    public ResponseEntity<SolicitudCreditoResponseDTO> crearSolicitudConValidacion(
+            @Valid @RequestBody SolicitudCreditoExtendidaDTO solicitudDTO) {
+        log.info("Creando solicitud con validación para cliente {} y vehículo {}", solicitudDTO.getIdClienteProspecto(), solicitudDTO.getPlacaVehiculo());
+        SolicitudCreditoResponseDTO response = solicitudService.crearSolicitudConValidacion(solicitudDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Simular escenarios de crédito", description = "Calcula diferentes escenarios de crédito usando sistema francés.")
+    @Operation(summary = "Simular crédito con validación de vehículo", 
+               description = "Simula un crédito validando la existencia y disponibilidad del vehículo - Genera 3 escenarios")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Simulación exitosa", content = @Content(schema = @Schema(implementation = AmortizacionDTO.class))),
-        @ApiResponse(responseCode = "400", description = "Datos inválidos", content = @Content)
+        @ApiResponse(responseCode = "400", description = "Datos inválidos o vehículo no disponible", content = @Content)
     })
-    @PostMapping("/simular")
-    public ResponseEntity<List<AmortizacionDTO>> simularCredito(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Datos para simulación", required = true, content = @Content(schema = @Schema(implementation = SimulacionDTO.class)))
-            @Valid @RequestBody SimulacionDTO simulacionDTO) {
-        log.info("Simulando crédito para vehículo {} y producto {}", simulacionDTO.getIdVehiculo(), simulacionDTO.getIdProductoCredito());
-        List<AmortizacionDTO> tabla = solicitudService.simularCredito(simulacionDTO);
-        return ResponseEntity.ok(tabla);
+    @PostMapping("/simular-con-validacion")
+    public ResponseEntity<List<AmortizacionDTO>> simularCreditoConValidacion(
+            @Parameter(description = "RUC del concesionario", required = true) @RequestParam String rucConcesionario,
+            @Parameter(description = "Placa del vehículo", required = true) @RequestParam String placaVehiculo,
+            @Parameter(description = "Monto solicitado", required = true) @RequestParam BigDecimal montoSolicitado,
+            @Parameter(description = "Plazo en meses", required = true) @RequestParam Integer plazoMeses,
+            @Parameter(description = "Tasa de interés anual (ej: 0.15 para 15%)", required = true) @RequestParam BigDecimal tasaInteres) {
+        log.info("Simulando crédito con validación para vehículo {} en concesionario {} con tasa {}", placaVehiculo, rucConcesionario, tasaInteres);
+        List<AmortizacionDTO> amortizacion = solicitudService.simularCreditoConValidacion(
+                rucConcesionario, placaVehiculo, montoSolicitado, plazoMeses, tasaInteres);
+        return ResponseEntity.ok(amortizacion);
     }
 
-    @Operation(summary = "Cargar documento a solicitud", description = "Sube y valida un documento PDF para la solicitud.")
+    @Operation(summary = "Cargar documento a solicitud", 
+               description = "Sube y valida un documento PDF para la solicitud (máximo 5MB)")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Documento cargado exitosamente", content = @Content(schema = @Schema(implementation = DocumentoAdjunto.class))),
         @ApiResponse(responseCode = "400", description = "Archivo inválido", content = @Content)
@@ -76,7 +83,8 @@ public class SolicitudController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Consultar estado e historial de solicitud", description = "Retorna el estado actual y el historial de cambios de la solicitud.")
+    @Operation(summary = "Consultar estado e historial de solicitud", 
+               description = "Retorna el estado actual y el historial de cambios de la solicitud")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Consulta exitosa", content = @Content),
         @ApiResponse(responseCode = "404", description = "Solicitud no encontrada", content = @Content)
@@ -89,7 +97,8 @@ public class SolicitudController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Cambiar estado de solicitud", description = "Cambia el estado de la solicitud y registra la trazabilidad.")
+    @Operation(summary = "Cambiar estado de solicitud", 
+               description = "Cambia el estado de la solicitud y registra la trazabilidad")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Estado cambiado exitosamente", content = @Content),
         @ApiResponse(responseCode = "400", description = "Transición no permitida", content = @Content)
@@ -105,16 +114,17 @@ public class SolicitudController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "Validar documentos completos", description = "Verifica que todos los documentos obligatorios estén cargados para la solicitud.")
+    @Operation(summary = "Obtener resumen de solicitud", 
+               description = "Obtiene información resumida de la solicitud con datos del vehículo")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Validación exitosa", content = @Content),
+        @ApiResponse(responseCode = "200", description = "Resumen obtenido exitosamente", content = @Content(schema = @Schema(implementation = SolicitudResumenDTO.class))),
         @ApiResponse(responseCode = "404", description = "Solicitud no encontrada", content = @Content)
     })
-    @GetMapping("/{idSolicitud}/validar-documentos")
-    public ResponseEntity<List<String>> validarDocumentosCompletos(
+    @GetMapping("/{idSolicitud}/resumen")
+    public ResponseEntity<SolicitudResumenDTO> obtenerResumenSolicitud(
             @Parameter(description = "ID de la solicitud", required = true) @PathVariable Long idSolicitud) {
-        log.info("Validando documentos completos para solicitud {}", idSolicitud);
-        List<String> faltantes = solicitudService.validarDocumentosCompletos(idSolicitud);
-        return ResponseEntity.ok(faltantes);
+        log.info("Obteniendo resumen de solicitud {}", idSolicitud);
+        SolicitudResumenDTO resumen = solicitudService.obtenerResumenSolicitud(idSolicitud);
+        return ResponseEntity.ok(resumen);
     }
 } 

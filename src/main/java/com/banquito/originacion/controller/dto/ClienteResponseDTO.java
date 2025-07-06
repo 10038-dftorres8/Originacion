@@ -1,6 +1,5 @@
 package com.banquito.originacion.controller.dto;
 
-import com.banquito.originacion.enums.ClasificacionClienteEnum;
 import com.banquito.originacion.enums.EstadoClienteEnum;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -35,6 +34,5 @@ public class ClienteResponseDTO {
     private String direccionLinea2;
     private String direccionCodigoPostal;
     private String direccionGeoCodigo;
-    private ClasificacionClienteEnum clasificacion;
     private String mensaje;
 } 
