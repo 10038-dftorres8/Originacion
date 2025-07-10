@@ -21,6 +21,7 @@ public interface ClienteCoreMapper {
     @Mapping(target = "mensaje", ignore = true)
     @Mapping(source = "numeroIdentificacion", target = "cedula")
     @Mapping(source = "nombre", target = "nombres")
+    @Mapping(source = "scoreInterno", target = "scoreInterno")
     @Mapping(source = "estado", target = "estado", qualifiedByName = "stringToEstadoCliente")
     @Mapping(source = "telefonos", target = "telefonoTransaccional", qualifiedByName = "extractTelefonoTransaccional")
     @Mapping(source = "telefonos", target = "telefonoTipo", qualifiedByName = "extractTelefonoTipo")
@@ -40,9 +41,10 @@ public interface ClienteCoreMapper {
     @Mapping(target = "correoTransaccional", constant = "cliente@email.com")
     ClienteResponseDTO toResponseDTO(ClienteCoreResponseDTO clienteCore);
 
-    @Mapping(source = "id", target = "idClienteCore", qualifiedByName = "stringToLong")
+    @Mapping(source = "id", target = "idClienteCore")
     @Mapping(source = "numeroIdentificacion", target = "cedula")
     @Mapping(source = "nombre", target = "nombres")
+    @Mapping(source = "scoreInterno", target = "scoreInterno")
     @Mapping(source = "telefonos", target = "telefonoTransaccional", qualifiedByName = "extractTelefonoTransaccional")
     @Mapping(source = "telefonos", target = "telefonoTipo", qualifiedByName = "extractTelefonoTipo")
     @Mapping(source = "telefonos", target = "telefonoNumero", qualifiedByName = "extractTelefonoNumero")
@@ -153,16 +155,5 @@ public interface ClienteCoreMapper {
                 .findFirst()
                 .map(DireccionDTO::getCodigoGeografico)
                 .orElse("170101");
-    }
-
-    @Named("stringToLong")
-    default Long stringToLong(String id) {
-        if (id == null || id.isEmpty()) return null;
-        try {
-            // Si es un ObjectId de MongoDB, usar hashCode para convertir a Long
-            return (long) id.hashCode();
-        } catch (Exception e) {
-            return null;
-        }
     }
 } 

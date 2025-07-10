@@ -16,9 +16,7 @@ public class GestionVehiculosService {
 
     private final GestionVehiculosClient gestionVehiculosClient;
 
-    /**
-     * Obtiene información de un vehículo por placa y RUC del concesionario
-     */
+    
     public VehiculoResponseDTO obtenerVehiculo(String ruc, String placa) {
         try {
             log.info("Consultando vehículo con placa: {} en concesionario RUC: {}", placa, ruc);
@@ -34,9 +32,7 @@ public class GestionVehiculosService {
         }
     }
 
-    /**
-     * Obtiene información de un vendedor por cédula y RUC del concesionario
-     */
+    
     public VendedorResponseDTO obtenerVendedor(String ruc, String cedula) {
         try {
             log.info("Consultando vendedor con cédula: {} en concesionario RUC: {}", cedula, ruc);
@@ -52,9 +48,7 @@ public class GestionVehiculosService {
         }
     }
 
-    /**
-     * Valida que un vehículo esté disponible para financiamiento
-     */
+    
     public boolean validarVehiculoDisponible(VehiculoResponseDTO vehiculo) {
         if (vehiculo == null) {
             return false;
@@ -65,16 +59,14 @@ public class GestionVehiculosService {
         
         if (!disponible) {
             log.warn("Vehículo {} no está disponible. Estado actual: {}", 
-                    vehiculo.getIdentificadorVehiculo() != null ? vehiculo.getIdentificadorVehiculo().getPlaca() : "N/A", 
+                    vehiculo.getPlaca() != null ? vehiculo.getPlaca() : "N/A", 
                     vehiculo.getEstado());
         }
         
         return disponible;
     }
 
-    /**
-     * Valida que un vendedor esté activo
-     */
+    
     public boolean validarVendedorActivo(VendedorResponseDTO vendedor) {
         if (vendedor == null) {
             return false;

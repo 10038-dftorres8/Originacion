@@ -19,6 +19,10 @@ public class VehiculoResponseDTO {
     private String tipo;
     private String combustible;
     private String condicion;
+    private String rucConcesionario;
     private Long version;
-    private IdentificadorVehiculoResponseDTO identificadorVehiculo;
+    // Campos del identificador del vehículo
+    private String placa;
+    private String chasis;
+    private String motor;
 } 

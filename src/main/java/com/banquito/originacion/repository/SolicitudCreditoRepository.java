@@ -23,7 +23,7 @@ public interface SolicitudCreditoRepository extends JpaRepository<SolicitudCredi
     
     List<SolicitudCredito> findByFechaSolicitudBetween(LocalDateTime fechaInicio, LocalDateTime fechaFin);
     
-    List<SolicitudCredito> findByIdVendedor(Long idVendedor);
+    List<SolicitudCredito> findByIdVendedor(String idVendedor);
     
     List<SolicitudCredito> findByEstadoAndFechaSolicitudBetween(String estado, LocalDateTime fechaInicio, LocalDateTime fechaFin);
 } 

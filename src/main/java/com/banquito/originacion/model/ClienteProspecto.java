@@ -23,8 +23,8 @@ public class ClienteProspecto {
     @Column(name = "id_cliente_prospecto", nullable = false)
     private Long id;
 
-    @Column(name = "id_cliente_core")
-    private Long idClienteCore;
+    @Column(name = "id_cliente_core", length = 50)
+    private String idClienteCore;
 
     @Column(name = "cedula", length = 10, nullable = false, unique = true)
     private String cedula;
@@ -82,6 +82,9 @@ public class ClienteProspecto {
 
     @Column(name = "direccion_geo_codigo", length = 20, nullable = false)
     private String direccionGeoCodigo;
+
+    @Column(name = "score_interno", precision = 10, scale = 2)
+    private BigDecimal scoreInterno;
 
     @Version
     @Column(name = "version")

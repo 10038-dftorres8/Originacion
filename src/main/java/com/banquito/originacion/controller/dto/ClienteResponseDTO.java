@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public class ClienteResponseDTO {
 
     private Long id;
-    private Long idClienteCore;
+    private String idClienteCore;
     private String cedula;
     private String nombres;
     private String genero;
@@ -35,4 +35,7 @@ public class ClienteResponseDTO {
     private String direccionCodigoPostal;
     private String direccionGeoCodigo;
     private String mensaje;
+    private Boolean existeEnCore;
+    private Boolean esCliente;
+    private BigDecimal scoreInterno;
 } 

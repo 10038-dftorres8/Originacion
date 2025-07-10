@@ -18,5 +18,5 @@ public interface ClienteProspectoRepository extends JpaRepository<ClienteProspec
     
     List<ClienteProspecto> findByNombresContainingIgnoreCase(String nombres);
     
-    Optional<ClienteProspecto> findByIdClienteCore(Long idClienteCore);
+    Optional<ClienteProspecto> findByIdClienteCore(String idClienteCore);
 } 

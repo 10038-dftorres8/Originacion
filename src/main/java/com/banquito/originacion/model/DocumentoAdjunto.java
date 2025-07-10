@@ -25,8 +25,8 @@ public class DocumentoAdjunto {
     @Column(name = "id_solicitud", nullable = false)
     private Long idSolicitud;
 
-    @Column(name = "id_documento_requerido", nullable = false)
-    private Long idDocumentoRequerido;
+    @Column(name = "tipo_documento", length = 50, nullable = false)
+    private String tipoDocumento;
 
     @Column(name = "nombre_archivo", length = 100, nullable = false)
     private String nombreArchivo;

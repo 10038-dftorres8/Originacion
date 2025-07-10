@@ -11,9 +11,11 @@ public interface DocumentoAdjuntoRepository extends JpaRepository<DocumentoAdjun
     
     List<DocumentoAdjunto> findByIdSolicitud(Long idSolicitud);
     
-    List<DocumentoAdjunto> findByIdSolicitudAndIdDocumentoRequerido(Long idSolicitud, Long idDocumentoRequerido);
+    List<DocumentoAdjunto> findByIdSolicitudAndTipoDocumento(Long idSolicitud, String tipoDocumento);
     
-    boolean existsByIdSolicitudAndIdDocumentoRequerido(Long idSolicitud, Long idDocumentoRequerido);
+    boolean existsByIdSolicitudAndTipoDocumento(Long idSolicitud, String tipoDocumento);
+    
+
     
     void deleteByIdSolicitud(Long idSolicitud);
 } 

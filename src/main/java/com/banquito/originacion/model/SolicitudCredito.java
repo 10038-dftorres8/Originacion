@@ -29,14 +29,14 @@ public class SolicitudCredito {
     @Column(name = "id_cliente_prospecto", nullable = false)
     private Long idClienteProspecto;
 
-    @Column(name = "id_vehiculo", nullable = false)
-    private Long idVehiculo;
+    @Column(name = "id_vehiculo", length = 50, nullable = false)
+    private String idVehiculo;
 
-    @Column(name = "id_vendedor", nullable = false)
-    private Long idVendedor;
+    @Column(name = "id_vendedor", length = 50, nullable = false)
+    private String idVendedor;
 
-    @Column(name = "id_producto_credito", nullable = false)
-    private Long idProductoCredito;
+    @Column(name = "id_prestamo", length = 50, nullable = false)
+    private String idPrestamo;
 
     // Campos para integración con servicio de gestión de vehículos
     @Column(name = "ruc_concesionario", length = 13)
@@ -57,11 +57,20 @@ public class SolicitudCredito {
     @Column(name = "valor_entrada", precision = 12, scale = 2, nullable = false)
     private BigDecimal valorEntrada;
 
-    @Column(name = "tasa_interes_aplicada", precision = 5, scale = 2, nullable = false)
+    @Column(name = "tasa_interes_aplicada", precision = 5, scale = 4, nullable = false)
     private BigDecimal tasaInteresAplicada;
+
+    @Column(name = "tasa_interes_base", precision = 5, scale = 4)
+    private BigDecimal tasaInteresBase;
 
     @Column(name = "cuota_mensual_calculada", precision = 10, scale = 2, nullable = false)
     private BigDecimal cuotaMensualCalculada;
+
+    @Column(name = "monto_total_calculado", precision = 12, scale = 2)
+    private BigDecimal montoTotalCalculado;
+
+    @Column(name = "total_intereses_calculado", precision = 12, scale = 2)
+    private BigDecimal totalInteresesCalculado;
 
     @Column(name = "fecha_solicitud", nullable = false)
     private LocalDateTime fechaSolicitud;

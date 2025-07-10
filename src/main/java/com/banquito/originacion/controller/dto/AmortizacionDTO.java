@@ -15,8 +15,7 @@ public class AmortizacionDTO {
     private BigDecimal saldoFinal;
     private String escenario;
     
-    // Constructor para compatibilidad con código existente
-    public AmortizacionDTO(Integer numeroCuota, BigDecimal saldoInicial, BigDecimal cuota, 
+    public AmortizacionDTO(Integer numeroCuota, BigDecimal saldoInicial, BigDecimal cuota,
                           BigDecimal abonoCapital, BigDecimal interes, BigDecimal saldoFinal) {
         this.numeroCuota = numeroCuota;
         this.saldoInicial = saldoInicial;

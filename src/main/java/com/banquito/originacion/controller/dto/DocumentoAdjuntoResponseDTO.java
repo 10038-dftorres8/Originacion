@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 public class DocumentoAdjuntoResponseDTO {
     private Long id;
     private Long idSolicitud;
-    private Long idDocumentoRequerido;
+    private String tipoDocumento;
     private String nombreArchivo;
     private String rutaStorage;
     private LocalDateTime fechaCarga;

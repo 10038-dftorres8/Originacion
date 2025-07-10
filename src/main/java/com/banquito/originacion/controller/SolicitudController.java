@@ -20,10 +20,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/solicitudes")
@@ -34,43 +35,41 @@ public class SolicitudController {
 
     private final SolicitudService solicitudService;
 
-    @Operation(summary = "Crear solicitud con validación de vehículo y vendedor", 
-               description = "Crea una nueva solicitud de crédito validando la existencia y estado del vehículo y vendedor")
+    @Operation(summary = "Crear solicitud de crédito", 
+               description = "Crea una nueva solicitud de crédito validando la existencia y estado del vehículo y vendedor. Valida automáticamente que el vendedor pertenezca a la concesionaria del vehículo.")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Solicitud creada exitosamente", content = @Content(schema = @Schema(implementation = SolicitudCredito.class))),
+        @ApiResponse(responseCode = "201", description = "Solicitud creada exitosamente", content = @Content(schema = @Schema(implementation = SolicitudCreditoResponseDTO.class))),
         @ApiResponse(responseCode = "400", description = "Datos inválidos o validación fallida", content = @Content)
     })
-    @PostMapping("/con-validacion")
-    public ResponseEntity<SolicitudCreditoResponseDTO> crearSolicitudConValidacion(
+    @PostMapping
+    public ResponseEntity<SolicitudCreditoResponseDTO> crearSolicitud(
             @Valid @RequestBody SolicitudCreditoExtendidaDTO solicitudDTO) {
-        log.info("Creando solicitud con validación para cliente {} y vehículo {}", solicitudDTO.getIdClienteProspecto(), solicitudDTO.getPlacaVehiculo());
+        log.info("Creando solicitud para cliente {} y vehículo placa {}", solicitudDTO.getIdClienteProspecto(), solicitudDTO.getPlacaVehiculo());
         SolicitudCreditoResponseDTO response = solicitudService.crearSolicitudConValidacion(solicitudDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Simular crédito con validación de vehículo", 
-               description = "Simula un crédito validando la existencia y disponibilidad del vehículo - Genera 3 escenarios")
+    @Operation(summary = "Simular crédito", 
+               description = "Simula un crédito validando la existencia y disponibilidad del vehículo. Genera 3 escenarios: con entrada 20%, sin entrada, y plazo máximo para menor cuota.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Simulación exitosa", content = @Content(schema = @Schema(implementation = AmortizacionDTO.class))),
+        @ApiResponse(responseCode = "200", description = "Simulación exitosa", content = @Content(schema = @Schema(implementation = SimulacionCreditoResponseDTO.class))),
         @ApiResponse(responseCode = "400", description = "Datos inválidos o vehículo no disponible", content = @Content)
     })
-    @PostMapping("/simular-con-validacion")
-    public ResponseEntity<List<AmortizacionDTO>> simularCreditoConValidacion(
-            @Parameter(description = "RUC del concesionario", required = true) @RequestParam String rucConcesionario,
-            @Parameter(description = "Placa del vehículo", required = true) @RequestParam String placaVehiculo,
-            @Parameter(description = "Monto solicitado", required = true) @RequestParam BigDecimal montoSolicitado,
-            @Parameter(description = "Plazo en meses", required = true) @RequestParam Integer plazoMeses,
-            @Parameter(description = "Tasa de interés anual (ej: 0.15 para 15%)", required = true) @RequestParam BigDecimal tasaInteres) {
-        log.info("Simulando crédito con validación para vehículo {} en concesionario {} con tasa {}", placaVehiculo, rucConcesionario, tasaInteres);
-        List<AmortizacionDTO> amortizacion = solicitudService.simularCreditoConValidacion(
-                rucConcesionario, placaVehiculo, montoSolicitado, plazoMeses, tasaInteres);
-        return ResponseEntity.ok(amortizacion);
+    @PostMapping("/simular")
+    public ResponseEntity<SimulacionCreditoResponseDTO> simularCredito(
+            @Valid @RequestBody SimulacionCreditoRequestDTO requestDTO) {
+        log.info("Simulando crédito para vehículo {} en concesionario {} con tasa {}", 
+                requestDTO.getPlacaVehiculo(), requestDTO.getRucConcesionario(), requestDTO.getTasaInteres());
+        SimulacionCreditoResponseDTO simulacion = solicitudService.simularCreditoConValidacion(
+                requestDTO.getRucConcesionario(), requestDTO.getPlacaVehiculo(), 
+                requestDTO.getMontoSolicitado(), requestDTO.getPlazoMeses(), requestDTO.getTasaInteres());
+        return ResponseEntity.ok(simulacion);
     }
 
     @Operation(summary = "Cargar documento a solicitud", 
-               description = "Sube y valida un documento PDF para la solicitud (máximo 5MB)")
+               description = "Sube y valida un documento PDF para la solicitud (máximo 20MB). Tipos válidos: CEDULA_IDENTIDAD, ROL_PAGOS, ESTADO_CUENTA_BANCARIA")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Documento cargado exitosamente", content = @Content(schema = @Schema(implementation = DocumentoAdjunto.class))),
+        @ApiResponse(responseCode = "201", description = "Documento cargado exitosamente", content = @Content(schema = @Schema(implementation = DocumentoAdjuntoResponseDTO.class))),
         @ApiResponse(responseCode = "400", description = "Archivo inválido", content = @Content)
     })
     @PostMapping("/{idSolicitud}/documentos")
@@ -83,10 +82,59 @@ public class SolicitudController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @Operation(summary = "Descargar documento", 
+               description = "Descarga un documento específico de la solicitud")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Documento descargado exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Documento no encontrado", content = @Content)
+    })
+    @GetMapping("/{idSolicitud}/documentos/{idDocumento}/descargar")
+    public ResponseEntity<Resource> descargarDocumento(
+            @Parameter(description = "ID de la solicitud", required = true) @PathVariable Long idSolicitud,
+            @Parameter(description = "ID del documento", required = true) @PathVariable Long idDocumento) {
+        log.info("Descargando documento {} de solicitud {}", idDocumento, idSolicitud);
+        Resource resource = solicitudService.descargarDocumento(idSolicitud, idDocumento);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(resource);
+    }
+
+    @Operation(summary = "Ver documento", 
+               description = "Visualiza un documento específico de la solicitud en el navegador")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Documento visualizado exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Documento no encontrado", content = @Content)
+    })
+    @GetMapping("/{idSolicitud}/documentos/{idDocumento}/ver")
+    public ResponseEntity<Resource> verDocumento(
+            @Parameter(description = "ID de la solicitud", required = true) @PathVariable Long idSolicitud,
+            @Parameter(description = "ID del documento", required = true) @PathVariable Long idDocumento) {
+        log.info("Visualizando documento {} de solicitud {}", idDocumento, idSolicitud);
+        Resource resource = solicitudService.descargarDocumento(idSolicitud, idDocumento);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(resource);
+    }
+
+    @Operation(summary = "Listar documentos de solicitud", 
+               description = "Obtiene la lista de documentos cargados para una solicitud")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Lista obtenida exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Solicitud no encontrada", content = @Content)
+    })
+    @GetMapping("/{idSolicitud}/documentos")
+    public ResponseEntity<List<DocumentoAdjuntoResponseDTO>> listarDocumentos(
+            @Parameter(description = "ID de la solicitud", required = true) @PathVariable Long idSolicitud) {
+        log.info("Listando documentos de solicitud {}", idSolicitud);
+        List<DocumentoAdjuntoResponseDTO> documentos = solicitudService.listarDocumentos(idSolicitud);
+        return ResponseEntity.ok(documentos);
+    }
+
     @Operation(summary = "Consultar estado e historial de solicitud", 
                description = "Retorna el estado actual y el historial de cambios de la solicitud")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Consulta exitosa", content = @Content),
+        @ApiResponse(responseCode = "200", description = "Consulta exitosa", content = @Content(schema = @Schema(implementation = EstadoSolicitudResponseDTO.class))),
         @ApiResponse(responseCode = "404", description = "Solicitud no encontrada", content = @Content)
     })
     @GetMapping("/{idSolicitud}/estado")

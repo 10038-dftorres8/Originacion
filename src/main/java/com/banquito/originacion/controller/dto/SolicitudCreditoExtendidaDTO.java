@@ -10,9 +10,9 @@ public class SolicitudCreditoExtendidaDTO {
     private Long idClienteProspecto;
     
     @NotNull
-    private Long idProductoCredito;
+    @NotBlank(message = "El ID del préstamo es requerido")
+    private String idPrestamo;
     
-    // El monto solicitado se calcula automáticamente como: valor del vehículo - entrada
     private BigDecimal montoSolicitado;
     
     @NotNull
@@ -22,17 +22,19 @@ public class SolicitudCreditoExtendidaDTO {
     @DecimalMin(value = "0.00")
     private BigDecimal valorEntrada;
     
-    @NotNull
-    @DecimalMin(value = "0.01")
-    @DecimalMax(value = "1.00")
+
+    @DecimalMin(value = "0.00")
+    @DecimalMax(value = "100.00")
     private BigDecimal tasaInteres;
     
-    // Información del concesionario y vehículo
-    @NotBlank(message = "El RUC del concesionario es requerido")
-    private String rucConcesionario;
-    
-    @NotBlank(message = "La placa del vehículo es requerida")
+    // Información del vehículo y vendedor
+    @NotNull(message = "La placa del vehículo es requerida")
+    @NotBlank(message = "La placa del vehículo no puede estar vacía")
     private String placaVehiculo;
+    
+    @NotNull(message = "El RUC del concesionario es requerido")
+    @NotBlank(message = "El RUC del concesionario no puede estar vacío")
+    private String rucConcesionario;
     
     @NotBlank(message = "La cédula del vendedor es requerida")
     private String cedulaVendedor;
