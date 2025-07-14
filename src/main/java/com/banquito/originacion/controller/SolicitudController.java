@@ -25,6 +25,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 import java.util.List;
+import com.banquito.originacion.controller.dto.SolicitudConsultaRequestDTO;
+import com.banquito.originacion.controller.dto.SolicitudConsultaResponseDTO;
 
 @RestController
 @RequestMapping("/api/v1/solicitudes")
@@ -174,5 +176,21 @@ public class SolicitudController {
         log.info("Obteniendo resumen de solicitud {}", idSolicitud);
         SolicitudResumenDTO resumen = solicitudService.obtenerResumenSolicitud(idSolicitud);
         return ResponseEntity.ok(resumen);
+    }
+
+    @Operation(summary = "Consultar solicitudes por rango de fechas", 
+               description = "Obtiene las solicitudes en un rango de fechas específico, opcionalmente filtradas por estado")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Consulta exitosa", content = @Content(schema = @Schema(implementation = SolicitudConsultaResponseDTO.class))),
+        @ApiResponse(responseCode = "400", description = "Parámetros inválidos", content = @Content)
+    })
+    @PostMapping("/consultar-por-fechas")
+    public ResponseEntity<List<SolicitudConsultaResponseDTO>> consultarSolicitudesPorFechas(
+            @Valid @RequestBody SolicitudConsultaRequestDTO requestDTO) {
+        log.info("Consultando solicitudes entre {} y {} con estado: {}", 
+                requestDTO.getFechaInicio(), requestDTO.getFechaFin(), requestDTO.getEstado());
+        List<SolicitudConsultaResponseDTO> solicitudes = solicitudService.consultarSolicitudesPorRangoFechas(
+                requestDTO.getFechaInicio(), requestDTO.getFechaFin(), requestDTO.getEstado());
+        return ResponseEntity.ok(solicitudes);
     }
 } 

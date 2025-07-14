@@ -2,53 +2,44 @@ package com.banquito.originacion.controller.mapper;
 
 import com.banquito.originacion.controller.dto.PersonaCoreResponseDTO;
 import com.banquito.originacion.enums.GeneroClienteEnum;
-import com.banquito.originacion.enums.TipoDireccionEnum;
-import com.banquito.originacion.enums.TipoTelefonoEnum;
 import com.banquito.originacion.model.ClienteProspecto;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Date;
 
-@Component
-public class PersonaCoreMapper {
+@Mapper(componentModel = "spring")
+public interface PersonaCoreMapper {
 
-    public ClienteProspecto toEntity(PersonaCoreResponseDTO personaCore) {
-        if (personaCore == null) {
-            return null;
-        }
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "idClienteCore", ignore = true)
+    @Mapping(source = "numeroIdentificacion", target = "cedula")
+    @Mapping(source = "nombre", target = "nombres")
+    @Mapping(source = "genero", target = "genero", qualifiedByName = "convertirGenero")
+    @Mapping(source = "fechaNacimiento", target = "fechaNacimiento", qualifiedByName = "convertirFecha")
+    @Mapping(source = "nivelEstudio", target = "nivelEstudio")
+    @Mapping(source = "estadoCivil", target = "estadoCivil")
+    @Mapping(source = "correoElectronico", target = "correoTransaccional")
+    @Mapping(target = "ingresos", ignore = true)
+    @Mapping(target = "egresos", ignore = true)
+    @Mapping(target = "actividadEconomica", ignore = true)
+    @Mapping(target = "estado", constant = "PROSPECTO")
+    @Mapping(target = "telefonoTransaccional", ignore = true)
+    @Mapping(target = "telefonoTipo", ignore = true)
+    @Mapping(target = "telefonoNumero", ignore = true)
+    @Mapping(target = "direccionTipo", ignore = true)
+    @Mapping(target = "direccionLinea1", ignore = true)
+    @Mapping(target = "direccionLinea2", ignore = true)
+    @Mapping(target = "direccionCodigoPostal", ignore = true)
+    @Mapping(target = "direccionGeoCodigo", ignore = true)
+    @Mapping(target = "scoreInterno", ignore = true)
+    ClienteProspecto toEntity(PersonaCoreResponseDTO personaCore);
 
-        ClienteProspecto clienteProspecto = new ClienteProspecto();
-        
-        clienteProspecto.setCedula(personaCore.getNumeroIdentificacion());
-        clienteProspecto.setNombres(personaCore.getNombre());
-        clienteProspecto.setGenero(convertirGenero(personaCore.getGenero()));
-        clienteProspecto.setFechaNacimiento(convertirFecha(personaCore.getFechaNacimiento()));
-        clienteProspecto.setNivelEstudio(personaCore.getNivelEstudio());
-        clienteProspecto.setEstadoCivil(personaCore.getEstadoCivil());
-        clienteProspecto.setCorreoTransaccional(personaCore.getCorreoElectronico());
-        
-        // Datos que no vienen del Core se dejan vacíos
-        clienteProspecto.setIngresos(null);
-        clienteProspecto.setEgresos(null);
-        clienteProspecto.setActividadEconomica(null);
-        clienteProspecto.setTelefonoTransaccional(null);
-        clienteProspecto.setTelefonoTipo(null);
-        clienteProspecto.setTelefonoNumero(null);
-        clienteProspecto.setDireccionTipo(null);
-        clienteProspecto.setDireccionLinea1(null);
-        clienteProspecto.setDireccionLinea2(null);
-        clienteProspecto.setDireccionCodigoPostal(null);
-        clienteProspecto.setDireccionGeoCodigo(null);
-        
-        clienteProspecto.setIdClienteCore(null);
-        
-        return clienteProspecto;
-    }
-
-    private String convertirGenero(String generoCore) {
+    @Named("convertirGenero")
+    default String convertirGenero(String generoCore) {
         if (generoCore == null) return null;
         
         switch (generoCore.toUpperCase()) {
@@ -63,7 +54,8 @@ public class PersonaCoreMapper {
         }
     }
 
-    private LocalDateTime convertirFecha(LocalDate fecha) {
+    @Named("convertirFecha")
+    default LocalDateTime convertirFecha(LocalDate fecha) {
         if (fecha == null) return null;
         return fecha.atStartOfDay();
     }

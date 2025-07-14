@@ -2,42 +2,35 @@ package com.banquito.originacion.controller.mapper;
 
 import com.banquito.originacion.controller.dto.ClienteProspectoRegistroDTO;
 import com.banquito.originacion.model.ClienteProspecto;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 
-@Component
-public class ClienteProspectoRegistroMapper {
+@Mapper(componentModel = "spring")
+public interface ClienteProspectoRegistroMapper {
 
-    public ClienteProspecto toEntity(ClienteProspectoRegistroDTO dto) {
-        if (dto == null) {
-            return null;
-        }
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "idClienteCore", ignore = true)
+    @Mapping(source = "genero", target = "genero", qualifiedByName = "generoToString")
+    @Mapping(source = "telefonoTipo", target = "telefonoTipo", qualifiedByName = "telefonoTipoToString")
+    @Mapping(source = "direccionTipo", target = "direccionTipo", qualifiedByName = "direccionTipoToString")
+    @Mapping(target = "estado", constant = "PROSPECTO")
+    @Mapping(target = "scoreInterno", constant = "0.00")
+    ClienteProspecto toEntity(ClienteProspectoRegistroDTO dto);
 
-        ClienteProspecto clienteProspecto = new ClienteProspecto();
-        
-        clienteProspecto.setCedula(dto.getCedula());
-        
-        clienteProspecto.setNombres(dto.getNombres());
-        clienteProspecto.setGenero(dto.getGenero() != null ? dto.getGenero().name() : null);
-        clienteProspecto.setFechaNacimiento(dto.getFechaNacimiento());
-        clienteProspecto.setNivelEstudio(dto.getNivelEstudio());
-        clienteProspecto.setEstadoCivil(dto.getEstadoCivil());
-        clienteProspecto.setIngresos(dto.getIngresos());
-        clienteProspecto.setEgresos(dto.getEgresos());
-        clienteProspecto.setActividadEconomica(dto.getActividadEconomica());
-        clienteProspecto.setCorreoTransaccional(dto.getCorreoTransaccional());
-        clienteProspecto.setTelefonoTransaccional(dto.getTelefonoTransaccional());
-        clienteProspecto.setTelefonoTipo(dto.getTelefonoTipo() != null ? dto.getTelefonoTipo().name() : null);
-        clienteProspecto.setTelefonoNumero(dto.getTelefonoNumero());
-        clienteProspecto.setDireccionTipo(dto.getDireccionTipo() != null ? dto.getDireccionTipo().name() : null);
-        clienteProspecto.setDireccionLinea1(dto.getDireccionLinea1());
-        clienteProspecto.setDireccionLinea2(dto.getDireccionLinea2());
-        clienteProspecto.setDireccionCodigoPostal(dto.getDireccionCodigoPostal());
-        clienteProspecto.setDireccionGeoCodigo(dto.getDireccionGeoCodigo());
-        
-        clienteProspecto.setEstado("PROSPECTO");
-        clienteProspecto.setIdClienteCore(null);
-        clienteProspecto.setScoreInterno(null);
-        
-        return clienteProspecto;
+    @Named("generoToString")
+    default String generoToString(com.banquito.originacion.enums.GeneroClienteEnum genero) {
+        return genero != null ? genero.name() : null;
+    }
+
+    @Named("telefonoTipoToString")
+    default String telefonoTipoToString(com.banquito.originacion.enums.TipoTelefonoEnum telefonoTipo) {
+        return telefonoTipo != null ? telefonoTipo.name() : null;
+    }
+
+    @Named("direccionTipoToString")
+    default String direccionTipoToString(com.banquito.originacion.enums.TipoDireccionEnum direccionTipo) {
+        return direccionTipo != null ? direccionTipo.name() : null;
     }
 } 

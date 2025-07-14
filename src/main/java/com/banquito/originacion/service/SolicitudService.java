@@ -35,6 +35,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import com.banquito.originacion.controller.dto.SolicitudConsultaRequestDTO;
+import com.banquito.originacion.controller.dto.SolicitudConsultaResponseDTO;
+import com.banquito.originacion.controller.mapper.SolicitudEstadoMapper;
+import com.banquito.originacion.controller.mapper.SolicitudResumenMapper;
+import com.banquito.originacion.controller.mapper.SolicitudConsultaMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -48,12 +53,14 @@ public class SolicitudService {
     private final ClienteProspectoRepository clienteProspectoRepository;
     private final DocumentoAdjuntoMapper documentoAdjuntoMapper;
     private final HistorialEstadoMapper historialEstadoMapper;
+    private final SolicitudEstadoMapper solicitudEstadoMapper;
+    private final SolicitudResumenMapper solicitudResumenMapper;
+    private final SolicitudConsultaMapper solicitudConsultaMapper;
     private final GestionVehiculosService gestionVehiculosService;
     private final PrestamosClient prestamosClient;
     private final CalculoFinancieroService calculoFinancieroService;
     private final FileStorageService fileStorageService;
     private final CoreBancarioClient coreBancarioClient;
-    private final CuentasClientesService cuentasClientesService;
     private final PrestamosClientesService prestamosClientesService;
 
     public SolicitudCreditoResponseDTO crearSolicitudConValidacion(SolicitudCreditoExtendidaDTO solicitudDTO) {
@@ -395,10 +402,15 @@ public class SolicitudService {
     public EstadoSolicitudResponseDTO consultarEstadoSolicitud(Long idSolicitud) {
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
+        
+        ClienteProspecto clienteProspecto = clienteProspectoRepository.findById(solicitud.getIdClienteProspecto())
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente prospecto no encontrado"));
+        
         List<HistorialEstado> historial = historialEstadoRepository.findByIdSolicitudOrderByFechaCambioAsc(idSolicitud);
-        EstadoSolicitudResponseDTO response = new EstadoSolicitudResponseDTO();
-        response.setEstadoActual(solicitud.getEstado());
+        
+        EstadoSolicitudResponseDTO response = solicitudEstadoMapper.toEstadoSolicitudResponseDTO(solicitud, clienteProspecto);
         response.setHistorial(historial.stream().map(historialEstadoMapper::toDTO).toList());
+        
         return response;
     }
 
@@ -418,7 +430,6 @@ public class SolicitudService {
         if (estadoNuevo == EstadoSolicitudEnum.APROBADA) {
             validarDocumentosObligatorios(idSolicitud);
             validarYCrearClienteEnCore(idSolicitud);
-            crearCuentaClienteSiNoExiste(idSolicitud);
             crearPrestamoCliente(idSolicitud);
         }
         
@@ -537,33 +548,7 @@ public class SolicitudService {
         log.info("Validación y creación de cliente en Core Bancario exitosa para solicitud {}", idSolicitud);
     }
 
-    private void crearCuentaClienteSiNoExiste(Long idSolicitud) {
-        SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
-                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
-        
-        ClienteProspecto clienteProspecto = clienteProspectoRepository.findById(solicitud.getIdClienteProspecto())
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente prospecto no encontrado"));
-        
-        log.info("Verificando cuenta cliente para cliente prospecto: {}", clienteProspecto.getCedula());
-        
-        try {
-            List<ClienteCoreResponseDTO> clientes = coreBancarioClient.consultarClientePorIdentificacion("CEDULA", clienteProspecto.getCedula());
-            if (clientes.isEmpty()) {
-                throw new CreateEntityException("CuentaCliente", "El cliente debe existir en Core Bancario antes de crear cuenta cliente");
-            }
-            
-            String idClienteCore = clientes.get(0).getId();
-            log.info("Cliente encontrado en Core Bancario con ID: {}", idClienteCore);
-            
-            // Crear cuenta cliente
-            cuentasClientesService.crearCuentaClienteParaCliente(idClienteCore);
-            log.info("Cuenta cliente creada/verificada exitosamente para cliente {}", idClienteCore);
-            
-        } catch (Exception e) {
-            log.error("Error al crear cuenta cliente para solicitud {}: {}", idSolicitud, e.getMessage());
-            throw new CreateEntityException("CuentaCliente", "Error al crear cuenta cliente: " + e.getMessage());
-        }
-    }
+
 
     private void crearPrestamoCliente(Long idSolicitud) {
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
@@ -624,19 +609,37 @@ public class SolicitudService {
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
         
+        ClienteProspecto clienteProspecto = clienteProspectoRepository.findById(solicitud.getIdClienteProspecto())
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente prospecto no encontrado"));
         
         VehiculoResponseDTO vehiculo = gestionVehiculosService.obtenerVehiculo(
             solicitud.getRucConcesionario(), 
             solicitud.getPlacaVehiculo()
         );
         
-        return new SolicitudResumenDTO(
-            solicitud.getId(),
-            vehiculo.getValor(), 
-            solicitud.getMontoSolicitado(), 
-            solicitud.getPlazoMeses(), 
-            solicitud.getTasaInteresAplicada() 
+        VendedorResponseDTO vendedor = gestionVehiculosService.obtenerVendedor(
+            solicitud.getRucConcesionario(), 
+            solicitud.getCedulaVendedor()
         );
+        
+        return solicitudResumenMapper.toSolicitudResumenDTO(solicitud, clienteProspecto, vehiculo, vendedor);
+    }
+
+    public List<SolicitudConsultaResponseDTO> consultarSolicitudesPorRangoFechas(LocalDateTime fechaInicio, LocalDateTime fechaFin, String estado) {
+        List<SolicitudCredito> solicitudes;
+        
+        if (estado != null && !estado.trim().isEmpty()) {
+            solicitudes = solicitudCreditoRepository.findByEstadoAndFechaSolicitudBetween(estado, fechaInicio, fechaFin);
+        } else {
+            solicitudes = solicitudCreditoRepository.findByFechaSolicitudBetween(fechaInicio, fechaFin);
+        }
+        
+        return solicitudes.stream().map(solicitud -> {
+            ClienteProspecto clienteProspecto = clienteProspectoRepository.findById(solicitud.getIdClienteProspecto())
+                    .orElse(new ClienteProspecto());
+            
+            return solicitudConsultaMapper.toSolicitudConsultaResponseDTO(solicitud, clienteProspecto);
+        }).toList();
     }
 
     private String generarNumeroSolicitud() {
