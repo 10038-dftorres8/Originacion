@@ -415,6 +415,8 @@ public class SolicitudService {
     }
 
     public void cambiarEstadoSolicitud(Long idSolicitud, String nuevoEstado, String motivo, String usuario) {
+        log.info("Iniciando cambio de estado de solicitud {} a estado: {}", idSolicitud, nuevoEstado);
+        
         SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
         
@@ -426,21 +428,42 @@ public class SolicitudService {
             throw new CreateEntityException("SolicitudCredito", "Estado de solicitud no válido: " + nuevoEstado);
         }
         
-        // Validar documentos obligatorios antes de aprobar
-        if (estadoNuevo == EstadoSolicitudEnum.APROBADA) {
-            validarDocumentosObligatorios(idSolicitud);
-            validarYCrearClienteEnCore(idSolicitud);
-            crearPrestamoCliente(idSolicitud);
-        }
+        log.info("Validando transición de estado: {} -> {}", estadoActual, estadoNuevo);
         
+        // PRIMERO: Validar que la transición de estado sea válida
         if (!esTransicionValida(estadoActual, estadoNuevo)) {
-            throw new CreateEntityException("SolicitudCredito", "Transición de estado no permitida: " + estadoActual + " -> " + estadoNuevo);
+            String mensajeError = String.format("Transición de estado no permitida: %s -> %s. La solicitud debe seguir la jerarquía: BORRADOR -> EN_REVISION -> APROBADA/RECHAZADA", 
+                estadoActual, estadoNuevo);
+            log.error("Error en cambio de estado: {}", mensajeError);
+            throw new CreateEntityException("SolicitudCredito", mensajeError);
         }
         
+        // SEGUNDO: Si se va a aprobar, validar todo ANTES de cambiar el estado
+        if (estadoNuevo == EstadoSolicitudEnum.APROBADA) {
+            log.info("Solicitud {} será aprobada. Validando requisitos...", idSolicitud);
+            
+            try {
+                log.info("Validando documentos obligatorios...");
+                validarDocumentosObligatorios(idSolicitud);
+                
+                log.info("Validando y creando cliente en Core Bancario...");
+                validarYCrearClienteEnCore(idSolicitud);
+                
+                log.info("Todas las validaciones exitosas para aprobación de solicitud {}", idSolicitud);
+                
+            } catch (Exception e) {
+                log.error("Error durante validaciones para aprobación de solicitud {}: {}", idSolicitud, e.getMessage());
+                throw new CreateEntityException("SolicitudCredito", 
+                    "No se puede aprobar la solicitud. Error en validaciones: " + e.getMessage());
+            }
+        }
+        
+        // TERCERO: Cambiar el estado de la solicitud
         String estadoAnterior = solicitud.getEstado();
         solicitud.setEstado(nuevoEstado);
         solicitudCreditoRepository.save(solicitud);
         
+        // CUARTO: Crear el historial del cambio
         HistorialEstado historial = new HistorialEstado();
         historial.setIdSolicitud(idSolicitud);
         historial.setEstadoAnterior(estadoAnterior);
@@ -450,7 +473,22 @@ public class SolicitudService {
         historial.setMotivo(motivo);
         historialEstadoRepository.save(historial);
         
-        log.info("Estado de solicitud {} cambiado de {} a {} por usuario {}", idSolicitud, estadoAnterior, nuevoEstado, usuario);
+        log.info("Estado de solicitud {} cambiado exitosamente de {} a {} por usuario {}", 
+                idSolicitud, estadoAnterior, nuevoEstado, usuario);
+        
+        // QUINTO: SOLO si se aprobó exitosamente, crear el préstamo cliente
+        if (estadoNuevo == EstadoSolicitudEnum.APROBADA) {
+            try {
+                log.info("Creando préstamo cliente para solicitud aprobada {}", idSolicitud);
+                crearPrestamoCliente(idSolicitud);
+                log.info("Préstamo cliente creado exitosamente para solicitud {}", idSolicitud);
+            } catch (Exception e) {
+                log.error("Error al crear préstamo cliente para solicitud {}: {}", idSolicitud, e.getMessage());
+                // NO revertimos el estado de la solicitud, pero registramos el error
+                throw new CreateEntityException("PrestamoCliente", 
+                    "La solicitud fue aprobada pero falló la creación del préstamo cliente: " + e.getMessage());
+            }
+        }
     }
 
     private void validarDocumentosObligatorios(Long idSolicitud) {
