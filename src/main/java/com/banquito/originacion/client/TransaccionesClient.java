@@ -5,7 +5,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "transacciones", url = "${app.transacciones.url:http://3.129.67.241:8080}")
+@FeignClient(name = "transacciones", url = "${app.transacciones.url}")
 public interface TransaccionesClient {
 
     @PostMapping("/api/v1/prestamos-clientes")

@@ -16,10 +16,9 @@ public class SolicitudConsultaResponseDTO {
     private LocalDateTime fechaSolicitud;
     private BigDecimal montoSolicitado;
     private Integer plazoMeses;
-    private BigDecimal cuotaMensual;
     private String placaVehiculo;
     private String rucConcesionario;
+    private String cedulaVendedor;
     private String idPrestamo;
-    private String cedulaCliente;
-    private String nombresCliente;
+    private String cedulaSolicitante;
 } 

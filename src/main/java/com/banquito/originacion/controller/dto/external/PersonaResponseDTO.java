@@ -1,17 +1,14 @@
-package com.banquito.originacion.controller.dto;
+package com.banquito.originacion.controller.dto.external;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Builder;
 import lombok.AllArgsConstructor;
 import java.time.LocalDate;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class PersonaCoreResponseDTO {
+public class PersonaResponseDTO {
     private String id;
     private String tipoIdentificacion;
     private String numeroIdentificacion;

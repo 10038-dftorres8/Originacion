@@ -18,7 +18,6 @@ public class EstadoSolicitudResponseDTO {
     private String rucConcesionario;
     private String cedulaVendedor;
     private String idPrestamo;
-    private String cedulaCliente;
-    private String nombresCliente;
+    private String cedulaSolicitante;
     private List<HistorialEstadoDTO> historial;
 } 

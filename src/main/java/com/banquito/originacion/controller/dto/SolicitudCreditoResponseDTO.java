@@ -8,23 +8,17 @@ import java.time.LocalDateTime;
 public class SolicitudCreditoResponseDTO {
     private Long id;
     private String numeroSolicitud;
-    private Long idClienteProspecto;
-    private String idVehiculo;
-    private String idVendedor;
+    private LocalDateTime fechaSolicitud;
+    private String cedulaSolicitante;
+    private String calificacionSolicitante;
+    private BigDecimal capacidadPagoSolicitante;
+    private String placaVehiculo;
+    private String rucConcesionario;
+    private String cedulaVendedor;
     private String idPrestamo;
+    private BigDecimal valorEntrada;
     private BigDecimal montoSolicitado;
     private Integer plazoMeses;
-    private BigDecimal valorEntrada;
-    private BigDecimal tasaInteresAplicada;
-    private BigDecimal tasaInteresBase;
-    private BigDecimal cuotaMensualCalculada;
-    private BigDecimal montoTotalCalculado;
-    private BigDecimal totalInteresesCalculado;
-    private LocalDateTime fechaSolicitud;
     private String estado;
     private Long version;
-    
-    private String rucConcesionario;
-    private String placaVehiculo;
-    private String cedulaVendedor;
 } 
