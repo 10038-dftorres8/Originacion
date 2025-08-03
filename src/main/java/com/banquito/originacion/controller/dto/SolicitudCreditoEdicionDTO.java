@@ -27,7 +27,7 @@ public class SolicitudCreditoEdicionDTO {
     
     @NotNull(message = "La placa del vehículo es requerida")
     @NotBlank(message = "La placa del vehículo no puede estar vacía")
-    @Pattern(regexp = "^[A-Z]{3}[0-9]{4}$", message = "La placa debe tener el formato AAA0000")
+    @Pattern(regexp = "^[A-Z]{3}[0-9]{4}$|^[A-Z]{3}-[0-9]{4}$", message = "La placa debe tener el formato AAA0000 o ABC-1234")
     private String placaVehiculo;
     
     @NotNull(message = "El RUC del concesionario es requerido")
