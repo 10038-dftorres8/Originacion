@@ -54,7 +54,7 @@ public class GestionVehiculosService {
             return false;
         }
         
-        // Verificar que el vehículo esté en estado DISPONIBLE
+        
         boolean disponible = "DISPONIBLE".equalsIgnoreCase(vehiculo.getEstado());
         
         if (!disponible) {
@@ -71,8 +71,7 @@ public class GestionVehiculosService {
         if (vendedor == null) {
             return false;
         }
-        
-        // Verificar que el vendedor esté en estado ACTIVO
+
         boolean activo = "ACTIVO".equalsIgnoreCase(vendedor.getEstado());
         
         if (!activo) {
