@@ -2,7 +2,12 @@ package com.banquito.originacion.enums;
 
 public enum EstadoSolicitudEnum {
     BORRADOR,
-    EN_REVISION,
+    DOCUMENTACION_CARGADA,
+    DOCUMENTACION_VALIDADA,
+    DOCUMENTACION_RECHAZADA,
+    CONTRATO_CARGADO,
+    CONTRATO_VALIDADO,
+    CONTRATO_RECHAZADO,
     APROBADA,
     RECHAZADA,
     CANCELADA
