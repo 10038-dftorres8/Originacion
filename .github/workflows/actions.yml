@@ -14,6 +14,10 @@ env:
   ECS_SERVICE: banquito-prestamos-originacion
   CONTAINER_NAME: originacion-container
 
+permissions:
+  id-token: write   # Necesario para OIDC
+  contents: read    # Necesario para actions/checkout
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -38,9 +42,9 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: arn:aws:iam::425784381978:role/GitHubActions-ECR-ECS-Role
         aws-region: ${{ env.AWS_REGION }}
+        role-session-name: GitHubActions-${{ github.run_id }}
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -50,18 +54,22 @@ jobs:
       env:
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        echo "Building Docker image for $ECR_REPOSITORY..."
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        echo "Pushing Docker image..."
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "Tagging latest..."
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        echo "Pushing latest..."
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
     - name: Update ECS service
       run: |
-        echo "Updating ECS service $ECS_SERVICE in cluster $ECS_CLUSTER..."
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --force-new-deployment
-        echo "Waiting for service to stabilize..."
-        aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE 
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_SERVICE \
+          --force-new-deployment \
+          --query "service.taskDefinition" \
+          --output text > task-definition.txt
+        
+        echo "Waiting for deployment to complete..."
+        aws ecs wait services-stable \
+          --cluster $ECS_CLUSTER \
+          --services $ECS_SERVICE
