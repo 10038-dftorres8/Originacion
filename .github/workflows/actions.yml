@@ -1,4 +1,4 @@
-name: Deploy Prestamos Cuentastransaccional to AWS
+name: Deploy Prestamos Originacion to AWS
 
 on:
   push:
