@@ -1,4 +1,4 @@
-name: Deploy Prestamos Originacion to AWS
+name: Deploy Originacion to AWS
 
 on:
   push:
