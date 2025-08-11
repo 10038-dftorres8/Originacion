@@ -24,7 +24,7 @@ import com.banquito.originacion.controller.dto.SolicitudConsultaRequestDTO;
 import com.banquito.originacion.controller.dto.SolicitudConsultaResponseDTO;
 
 @RestController
-@RequestMapping("/api/v1/solicitudes")
+@RequestMapping("/api/originacion/v1/solicitudes")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Solicitudes de Crédito", description = "Operaciones para la gestión de solicitudes de crédito")
