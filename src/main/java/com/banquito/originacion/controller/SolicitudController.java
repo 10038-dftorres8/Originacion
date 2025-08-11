@@ -2,7 +2,6 @@ package com.banquito.originacion.controller;
 
 import com.banquito.originacion.controller.dto.*;
 import com.banquito.originacion.enums.EstadoSolicitudEnum;
-import com.banquito.originacion.model.SolicitudCredito;
 import com.banquito.originacion.service.SolicitudService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,9 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import com.banquito.originacion.controller.dto.SolicitudConsultaRequestDTO;
-import com.banquito.originacion.controller.dto.SolicitudConsultaResponseDTO;
 
 @RestController
 @RequestMapping("/api/originacion/v1/solicitudes")
