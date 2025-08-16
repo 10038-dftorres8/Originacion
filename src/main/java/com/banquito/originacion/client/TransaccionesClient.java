@@ -8,6 +8,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 @FeignClient(name = "transacciones", url = "${app.transacciones.url}")
 public interface TransaccionesClient {
 
-    @PostMapping("/api/v1/prestamos-clientes")
+    @PostMapping("/api/prestamos/v1/prestamos-clientes")
     PrestamoClienteExternalDTO crearPrestamoCliente(@RequestBody PrestamoClienteExternalDTO prestamoClienteDTO);
 } 

@@ -9,7 +9,6 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Mapper(componentModel = "spring")
 public interface SimulacionSolicitudMapper {
