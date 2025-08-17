@@ -9,6 +9,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Mapper(componentModel = "spring")
 public interface SimulacionSolicitudMapper {
@@ -44,6 +45,6 @@ public interface SimulacionSolicitudMapper {
         if (tasaInteres == null) {
             return BigDecimal.ZERO;
         }
-        return tasaInteres.divide(new BigDecimal("100"), 4, BigDecimal.ROUND_HALF_UP);
+        return tasaInteres.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
     }
 } 

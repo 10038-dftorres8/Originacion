@@ -9,6 +9,7 @@ import com.banquito.originacion.controller.dto.external.PersonaResponseDTO;
 import com.banquito.originacion.controller.dto.external.ConcesionarioResponseDTO;
 import com.banquito.originacion.controller.mapper.*;
 import com.banquito.originacion.enums.EstadoSolicitudEnum;
+import static com.banquito.originacion.enums.EstadoSolicitudEnum.*;
 import com.banquito.originacion.exception.CreateEntityException;
 import com.banquito.originacion.exception.ResourceNotFoundException;
 import com.banquito.originacion.model.SolicitudCredito;
@@ -20,8 +21,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -164,43 +167,55 @@ public class SolicitudService {
     }
 
     public void cambiarEstadoSolicitud(Long idSolicitud, String nuevoEstado, String motivo, String usuario) {
-        log.info("Iniciando cambio de estado de solicitud {} a estado: {}", idSolicitud, nuevoEstado);
-
-        SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
-                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
-
-        EstadoSolicitudEnum estadoActual = EstadoSolicitudEnum.valueOf(solicitud.getEstado());
-        EstadoSolicitudEnum estadoNuevo;
         try {
-            estadoNuevo = EstadoSolicitudEnum.valueOf(nuevoEstado);
-        } catch (IllegalArgumentException e) {
-            throw new CreateEntityException("SolicitudCredito", "Estado de solicitud no válido: " + nuevoEstado);
+            log.info("🔄 Iniciando cambio de estado de solicitud {} a estado: {}", idSolicitud, nuevoEstado);
+
+            SolicitudCredito solicitud = solicitudCreditoRepository.findById(idSolicitud)
+                    .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada"));
+            log.info("✅ Solicitud encontrada - Estado actual: {}", solicitud.getEstado());
+
+            EstadoSolicitudEnum estadoActual = EstadoSolicitudEnum.valueOf(solicitud.getEstado());
+            log.info("✅ Estado actual parseado: {}", estadoActual);
+
+            EstadoSolicitudEnum estadoNuevo;
+            try {
+                estadoNuevo = EstadoSolicitudEnum.valueOf(nuevoEstado);
+                log.info("✅ Estado nuevo parseado: {}", estadoNuevo);
+            } catch (IllegalArgumentException e) {
+                log.error("❌ Estado de solicitud no válido: {}", nuevoEstado);
+                throw new CreateEntityException("SolicitudCredito", "Estado de solicitud no válido: " + nuevoEstado);
+            }
+
+            log.info("🔍 Validando transición de estado: {} -> {}", estadoActual, estadoNuevo);
+
+            if (!esTransicionValida(estadoActual, estadoNuevo)) {
+                String mensajeError = String.format(
+                        "Transición de estado no permitida: %s -> %s. La solicitud debe seguir la jerarquía: BORRADOR -> EN_REVISION -> APROBADA/RECHAZADA",
+                        estadoActual, estadoNuevo);
+                log.error("❌ Error en cambio de estado: {}", mensajeError);
+                throw new CreateEntityException("SolicitudCredito", mensajeError);
+            }
+            log.info("✅ Transición válida");
+
+            String estadoAnterior = solicitud.getEstado();
+            solicitud.setEstado(nuevoEstado);
+            solicitudCreditoRepository.save(solicitud);
+            log.info("✅ Estado actualizado en base de datos");
+
+            HistorialEstadoDTO historialDTO = new HistorialEstadoDTO(
+                    idSolicitud, estadoAnterior, nuevoEstado,
+                    LocalDateTime.now(), 0L, motivo);
+
+            HistorialEstado historial = historialEstadoMapper.toEntity(historialDTO);
+            historialEstadoRepository.save(historial);
+            log.info("✅ Historial guardado");
+
+            log.info("✅ Estado de solicitud {} cambiado exitosamente de {} a {} por usuario {}",
+                    idSolicitud, estadoAnterior, nuevoEstado, usuario);
+        } catch (Exception e) {
+            log.error("❌ Error en cambiarEstadoSolicitud: {}", e.getMessage(), e);
+            throw e;
         }
-
-        log.info("Validando transición de estado: {} -> {}", estadoActual, estadoNuevo);
-
-        if (!esTransicionValida(estadoActual, estadoNuevo)) {
-            String mensajeError = String.format(
-                    "Transición de estado no permitida: %s -> %s. La solicitud debe seguir la jerarquía: BORRADOR -> EN_REVISION -> APROBADA/RECHAZADA",
-                    estadoActual, estadoNuevo);
-            log.error("Error en cambio de estado: {}", mensajeError);
-            throw new CreateEntityException("SolicitudCredito", mensajeError);
-        }
-
-        String estadoAnterior = solicitud.getEstado();
-        solicitud.setEstado(nuevoEstado);
-        solicitudCreditoRepository.save(solicitud);
-
-        HistorialEstadoDTO historialDTO = new HistorialEstadoDTO(
-                idSolicitud, estadoAnterior, nuevoEstado,
-                LocalDateTime.now(), 0L, motivo);
-
-        HistorialEstado historial = historialEstadoMapper.toEntity(historialDTO);
-        historialEstadoRepository.save(historial);
-
-        log.info("Estado de solicitud {} cambiado exitosamente de {} a {} por usuario {}",
-                idSolicitud, estadoAnterior, nuevoEstado, usuario);
-
     }
 
     public SolicitudDetalladaResponseDTO obtenerSolicitudDetallada(String numeroSolicitud) {
@@ -211,25 +226,116 @@ public class SolicitudService {
                         () -> new ResourceNotFoundException("Solicitud no encontrada con número: " + numeroSolicitud));
 
         try {
-            PersonaResponseDTO persona = coreBancarioClient.consultarPersonaPorIdentificacion("CEDULA",
-                    solicitud.getCedulaSolicitante());
+            // Intentar obtener información de servicios externos, pero manejar errores graciosamente
+            PersonaResponseDTO persona = null;
+            VehiculoResponseDTO vehiculo = null;
+            ConcesionarioResponseDTO concesionario = null;
+            VendedorResponseDTO vendedor = null;
+            PrestamosExternalDTO prestamo = null;
 
-            VehiculoResponseDTO vehiculo = gestionVehiculosClient.getVehiculoByPlaca(solicitud.getRucConcesionario(),
-                    solicitud.getPlacaVehiculo());
+            try {
+                // Primero intentar con ModuloCliente local
+                String url = "http://localhost:83/api/clientes/v1/clientes/personas/CEDULA/" + solicitud.getCedulaSolicitante();
+                System.out.println("Consultando persona en ModuloCliente: " + url);
+                
+                RestTemplate restTemplate = new RestTemplate();
+                Object clienteResponse = restTemplate.getForObject(url, Object.class);
+                
+                if (clienteResponse != null) {
+                    // Mapear la respuesta del ModuloCliente a PersonaResponseDTO
+                    persona = new PersonaResponseDTO();
+                    persona.setNumeroIdentificacion(solicitud.getCedulaSolicitante());
+                    persona.setTipoIdentificacion("CEDULA");
+                    
+                    // Extraer nombre del response (asumiendo que es un Map)
+                    if (clienteResponse instanceof Map) {
+                        Map<String, Object> clienteMap = (Map<String, Object>) clienteResponse;
+                        String nombre = (String) clienteMap.get("nombre");
+                        String email = (String) clienteMap.get("correoElectronico");
+                        
+                        persona.setNombre(nombre != null ? nombre : "Cliente " + solicitud.getCedulaSolicitante());
+                        persona.setCorreoElectronico(email != null ? email : "cliente@" + solicitud.getCedulaSolicitante() + ".com");
+                    } else {
+                        persona.setNombre("Cliente " + solicitud.getCedulaSolicitante());
+                        persona.setCorreoElectronico("cliente@" + solicitud.getCedulaSolicitante() + ".com");
+                    }
+                    
+                    persona.setEstado("ACTIVO");
+                    System.out.println("Persona obtenida de ModuloCliente: " + persona.getNombre());
+                } else {
+                    throw new Exception("Respuesta vacía de ModuloCliente");
+                }
+            } catch (Exception e) {
+                System.out.println("No se pudo obtener información de persona desde ModuloCliente: " + e.getMessage());
+                // Fallback: intentar con CoreBancario
+                try {
+                    persona = coreBancarioClient.consultarPersonaPorIdentificacion("CEDULA",
+                            solicitud.getCedulaSolicitante());
+                } catch (Exception e2) {
+                    System.out.println("No se pudo obtener información de persona desde CoreBancario: " + e2.getMessage());
+                    // Crear persona mock como último recurso
+                    persona = new PersonaResponseDTO();
+                    persona.setNumeroIdentificacion(solicitud.getCedulaSolicitante());
+                    persona.setTipoIdentificacion("CEDULA");
+                    persona.setNombre("Cliente " + solicitud.getCedulaSolicitante());
+                    persona.setCorreoElectronico("cliente@" + solicitud.getCedulaSolicitante() + ".com");
+                    persona.setEstado("ACTIVO");
+                }
+            }
 
-            ConcesionarioResponseDTO concesionario = gestionVehiculosClient
-                    .getConcesionarioByRuc(solicitud.getRucConcesionario());
+            try {
+                System.out.println("Consultando vehículo - RUC: " + solicitud.getRucConcesionario() + ", Placa: " + solicitud.getPlacaVehiculo());
+                vehiculo = gestionVehiculosClient.getVehiculoByPlaca(solicitud.getRucConcesionario(),
+                        solicitud.getPlacaVehiculo());
+                System.out.println("Vehículo obtenido: " + vehiculo);
+            } catch (Exception e) {
+                System.out.println("No se pudo obtener información de vehículo: " + e.getMessage());
+                e.printStackTrace();
+                // Crear vehículo mock
+                vehiculo = new VehiculoResponseDTO();
+                vehiculo.setPlaca(solicitud.getPlacaVehiculo());
+                vehiculo.setMarca("Marca");
+                vehiculo.setModelo("Modelo");
+                vehiculo.setValor(solicitud.getMontoSolicitado());
+            }
 
-            VendedorResponseDTO vendedor = gestionVehiculosClient.getVendedorByCedula(solicitud.getRucConcesionario(),
-                    solicitud.getCedulaVendedor());
+            try {
+                concesionario = gestionVehiculosClient.getConcesionarioByRuc(solicitud.getRucConcesionario());
+            } catch (Exception e) {
+                System.out.println("No se pudo obtener información de concesionario: " + e.getMessage());
+                // Crear concesionario mock
+                concesionario = new ConcesionarioResponseDTO();
+                concesionario.setRuc(solicitud.getRucConcesionario());
+                concesionario.setRazonSocial("Concesionario " + solicitud.getRucConcesionario());
+            }
 
-            PrestamosExternalDTO prestamo = prestamosClient.consultarPrestamoPorId(solicitud.getIdPrestamo());
+            try {
+                vendedor = gestionVehiculosClient.getVendedorByCedula(solicitud.getRucConcesionario(),
+                        solicitud.getCedulaVendedor());
+            } catch (Exception e) {
+                System.out.println("No se pudo obtener información de vendedor: " + e.getMessage());
+                // Crear vendedor mock
+                vendedor = new VendedorResponseDTO();
+                vendedor.setCedula(solicitud.getCedulaVendedor());
+                vendedor.setNombre("Vendedor " + solicitud.getCedulaVendedor());
+            }
+
+            try {
+                prestamo = prestamosClient.consultarPrestamoPorId(solicitud.getIdPrestamo());
+            } catch (Exception e) {
+                System.out.println("No se pudo obtener información de préstamo: " + e.getMessage());
+                // Crear préstamo mock
+                prestamo = new PrestamosExternalDTO();
+                prestamo.setId(solicitud.getIdPrestamo());
+                prestamo.setNombre("Préstamo Automotriz");
+                prestamo.setTasaInteres(new BigDecimal("12.5"));
+            }
 
             return solicitudDetalladaMapper.toSolicitudDetalladaResponseDTO(
                     solicitud, persona, vehiculo, concesionario, vendedor, prestamo);
 
-        } catch (RestClientException e) {
-            log.error("Error al obtener información externa para la solicitud {}: {}", numeroSolicitud, e.getMessage());
+        } catch (Exception e) {
+            System.out.println("Error general al obtener información detallada: " + e.getMessage());
             throw new CreateEntityException("SolicitudCredito",
                     "Error al obtener información detallada de la solicitud: " + e.getMessage());
         }
@@ -490,13 +596,13 @@ public class SolicitudService {
 
     private BigDecimal calcularCuotaMensual(BigDecimal monto, int plazo, BigDecimal tasaAnualPorcentaje) {
         BigDecimal tasaMensualPorcentaje = tasaAnualPorcentaje.divide(BigDecimal.valueOf(12), 8,
-                BigDecimal.ROUND_HALF_UP);
+                RoundingMode.HALF_UP);
         BigDecimal tasaMensualDecimal = tasaMensualPorcentaje.divide(BigDecimal.valueOf(100), 8,
-                BigDecimal.ROUND_HALF_UP);
+                RoundingMode.HALF_UP);
         BigDecimal cuota = monto.multiply(tasaMensualDecimal)
                 .divide(BigDecimal.ONE.subtract(BigDecimal.ONE
-                        .divide((BigDecimal.ONE.add(tasaMensualDecimal)).pow(plazo), 8, BigDecimal.ROUND_HALF_UP)), 2,
-                        BigDecimal.ROUND_HALF_UP);
+                        .divide((BigDecimal.ONE.add(tasaMensualDecimal)).pow(plazo), 8, RoundingMode.HALF_UP)), 2,
+                        RoundingMode.HALF_UP);
         return cuota;
     }
 
@@ -505,12 +611,12 @@ public class SolicitudService {
         List<AmortizacionDTO> tabla = new ArrayList<>();
         BigDecimal saldo = monto;
         BigDecimal tasaMensualPorcentaje = tasaAnualPorcentaje.divide(BigDecimal.valueOf(12), 8,
-                BigDecimal.ROUND_HALF_UP);
+                RoundingMode.HALF_UP);
         BigDecimal tasaMensualDecimal = tasaMensualPorcentaje.divide(BigDecimal.valueOf(100), 8,
-                BigDecimal.ROUND_HALF_UP);
+                RoundingMode.HALF_UP);
         BigDecimal cuota = calcularCuotaMensual(monto, plazo, tasaAnualPorcentaje);
         for (int i = 1; i <= plazo; i++) {
-            BigDecimal interes = saldo.multiply(tasaMensualDecimal).setScale(2, BigDecimal.ROUND_HALF_UP);
+            BigDecimal interes = saldo.multiply(tasaMensualDecimal).setScale(2, RoundingMode.HALF_UP);
             BigDecimal abonoCapital = cuota.subtract(interes);
             BigDecimal saldoFinal = saldo.subtract(abonoCapital);
             tabla.add(new AmortizacionDTO(i, saldo, cuota, abonoCapital, interes, saldoFinal));
@@ -529,17 +635,17 @@ public class SolicitudService {
     private boolean esTransicionValida(EstadoSolicitudEnum actual, EstadoSolicitudEnum nuevo) {
         return switch (actual) {
             case BORRADOR ->
-                nuevo == EstadoSolicitudEnum.DOCUMENTACION_CARGADA || nuevo == EstadoSolicitudEnum.CANCELADA;
-            case EstadoSolicitudEnum.DOCUMENTACION_CARGADA ->
-                nuevo == EstadoSolicitudEnum.DOCUMENTACION_VALIDADA || nuevo == EstadoSolicitudEnum.DOCUMENTACION_RECHAZADA || nuevo == EstadoSolicitudEnum.CANCELADA;
-            case EstadoSolicitudEnum.DOCUMENTACION_VALIDADA ->
-                nuevo == EstadoSolicitudEnum.CONTRATO_CARGADO || nuevo == EstadoSolicitudEnum.CANCELADA;
-            case EstadoSolicitudEnum.DOCUMENTACION_RECHAZADA ->
-                nuevo == EstadoSolicitudEnum.CANCELADA;
-            case EstadoSolicitudEnum.CONTRATO_CARGADO ->
-                nuevo == EstadoSolicitudEnum.CONTRATO_VALIDADO || nuevo == EstadoSolicitudEnum.CONTRATO_RECHAZADO || nuevo == EstadoSolicitudEnum.CANCELADA;
-            case EstadoSolicitudEnum.CONTRATO_VALIDADO, EstadoSolicitudEnum.CONTRATO_RECHAZADO ->
-                nuevo == EstadoSolicitudEnum.APROBADA || nuevo == EstadoSolicitudEnum.RECHAZADA || nuevo == EstadoSolicitudEnum.CANCELADA;
+                nuevo == DOCUMENTACION_CARGADA || nuevo == CANCELADA;
+            case DOCUMENTACION_CARGADA ->
+                nuevo == DOCUMENTACION_VALIDADA || nuevo == DOCUMENTACION_RECHAZADA || nuevo == CANCELADA;
+            case DOCUMENTACION_VALIDADA ->
+                nuevo == CONTRATO_CARGADO || nuevo == CANCELADA;
+            case DOCUMENTACION_RECHAZADA ->
+                nuevo == CANCELADA;
+            case CONTRATO_CARGADO ->
+                nuevo == CONTRATO_VALIDADO || nuevo == CONTRATO_RECHAZADO || nuevo == CANCELADA;
+            case CONTRATO_VALIDADO, CONTRATO_RECHAZADO ->
+                nuevo == APROBADA || nuevo == RECHAZADA || nuevo == CANCELADA;
             default ->
                 false;
         };

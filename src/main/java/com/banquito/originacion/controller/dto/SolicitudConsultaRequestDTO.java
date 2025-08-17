@@ -4,10 +4,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Pattern;
-import lombok.Data;
 import java.time.LocalDateTime;
 
-@Data
 public class SolicitudConsultaRequestDTO {
     @NotNull(message = "La fecha de inicio es requerida")
     private LocalDateTime fechaInicio;
@@ -29,4 +27,22 @@ public class SolicitudConsultaRequestDTO {
     @Min(value = 1, message = "El tamaño de página debe ser al menos 1")
     @Max(value = 100, message = "El tamaño de página no puede exceder 100")
     private Integer tamanoPagina = 20;
+
+    // Getters
+    public LocalDateTime getFechaInicio() { return fechaInicio; }
+    public LocalDateTime getFechaFin() { return fechaFin; }
+    public String getEstado() { return estado; }
+    public String getCedulaVendedor() { return cedulaVendedor; }
+    public String getRucConcesionario() { return rucConcesionario; }
+    public Integer getPagina() { return pagina; }
+    public Integer getTamanoPagina() { return tamanoPagina; }
+
+    // Setters
+    public void setFechaInicio(LocalDateTime fechaInicio) { this.fechaInicio = fechaInicio; }
+    public void setFechaFin(LocalDateTime fechaFin) { this.fechaFin = fechaFin; }
+    public void setEstado(String estado) { this.estado = estado; }
+    public void setCedulaVendedor(String cedulaVendedor) { this.cedulaVendedor = cedulaVendedor; }
+    public void setRucConcesionario(String rucConcesionario) { this.rucConcesionario = rucConcesionario; }
+    public void setPagina(Integer pagina) { this.pagina = pagina; }
+    public void setTamanoPagina(Integer tamanoPagina) { this.tamanoPagina = tamanoPagina; }
 } 

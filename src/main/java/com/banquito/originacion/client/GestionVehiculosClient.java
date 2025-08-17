@@ -10,12 +10,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 @FeignClient(name = "gestion-vehiculos", url = "${app.gestion-vehiculos.url}")
 public interface GestionVehiculosClient {
 
-    @GetMapping("/api/concesionarios/v1/ruc/{ruc}/vehiculos/placa/{placa}")
+    @GetMapping("/v1/ruc/{ruc}/vehiculos/placa/{placa}")
     VehiculoResponseDTO getVehiculoByPlaca(@PathVariable("ruc") String ruc, @PathVariable("placa") String placa);
 
-    @GetMapping("/api/concesionarios/v1/ruc/{ruc}/vendedores/cedula/{cedula}")
+    @GetMapping("/v1/ruc/{ruc}/vendedores/cedula/{cedula}")
     VendedorResponseDTO getVendedorByCedula(@PathVariable("ruc") String ruc, @PathVariable("cedula") String cedula);
     
-    @GetMapping("/api/concesionarios/v1/ruc/{ruc}")
+    @GetMapping("/v1/ruc/{ruc}")
     ConcesionarioResponseDTO getConcesionarioByRuc(@PathVariable("ruc") String ruc);
 } 
