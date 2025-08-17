@@ -1,14 +1,17 @@
 package com.banquito.originacion.config;
 
 import feign.codec.ErrorDecoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class CustomErrorDecoder implements ErrorDecoder {
 
     @Override
     public Exception decode(String methodKey, feign.Response response) {
-        System.out.println("Error en llamada Feign - Method: " + methodKey + ", Status: " + response.status() + ", Reason: " + response.reason());
+        log.error("Error en llamada Feign - Method: {}, Status: {}, Reason: {}", 
+                methodKey, response.status(), response.reason());
         
         switch (response.status()) {
             case 400:
