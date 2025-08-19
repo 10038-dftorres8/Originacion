@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 @FeignClient(name = "core-bancario", url = "${app.core-bancario.url}")
 public interface CoreBancarioClient {
 
-    @GetMapping("/api/clientes/v1/clientes/personas/{tipoIdentificacion}/{numeroIdentificacion}")
+    @GetMapping("/v1/clientes/personas/{tipoIdentificacion}/{numeroIdentificacion}")
     PersonaResponseDTO consultarPersonaPorIdentificacion(@PathVariable("tipoIdentificacion") String tipoIdentificacion, @PathVariable("numeroIdentificacion") String numeroIdentificacion);
 
-    @GetMapping("/api/clientes/v1/clientes/clientes")
+    @GetMapping("/v1/clientes/clientes")
     Object consultarClientePorIdentificacion(@PathVariable("tipoIdentificacion") String tipoIdentificacion, @PathVariable("numeroIdentificacion") String numeroIdentificacion);
 } 
